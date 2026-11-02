@@ -8,6 +8,7 @@
       "version": "0.1.0+1",
       "dependencies": [
         "archive",
+        "crypto",
         "file_picker",
         "flutter",
         "google_sign_in",
@@ -44,6 +45,11 @@
         "test_api",
         "vector_math"
       ]
+    },
+    {
+      "name": "crypto",
+      "version": "3.0.8",
+      "dependencies": []
     },
     {
       "name": "http",
@@ -273,11 +279,6 @@
     {
       "name": "fixnum",
       "version": "1.1.1",
-      "dependencies": []
-    },
-    {
-      "name": "crypto",
-      "version": "3.0.8",
       "dependencies": []
     },
     {

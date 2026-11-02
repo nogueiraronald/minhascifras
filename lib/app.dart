@@ -4,7 +4,7 @@ import 'data/account_controller.dart';
 import 'data/chord_library.dart';
 import 'data/setlist_repository.dart';
 import 'data/song_repository.dart';
-import 'screens/song_list_screen.dart';
+import 'screens/main_screen.dart';
 import 'services/sync_service.dart';
 
 class CifrasApp extends StatelessWidget {
@@ -29,7 +29,13 @@ class CifrasApp extends StatelessWidget {
       title: 'Cifras',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(colorSchemeSeed: Colors.indigo, useMaterial3: true),
-      home: SongListScreen(repository: repository, chords: chords, account: account, sync: sync, setlists: setlists),
+      home: MainScreen(
+        repository: repository,
+        chords: chords,
+        account: account,
+        sync: sync,
+        setlists: setlists,
+      ),
     );
   }
 }

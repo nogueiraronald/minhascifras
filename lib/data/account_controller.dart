@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/google_auth_service.dart';
@@ -21,6 +20,7 @@ class AccountController extends ChangeNotifier {
   String? error;
 
   SheetsService get sheets => _sheets;
+  GoogleAuthService get auth => _auth;
 
   static Future<AccountController> open() async {
     final prefs = await SharedPreferences.getInstance();
@@ -38,16 +38,10 @@ class AccountController extends ChangeNotifier {
     }
   }
 
-  Future<void> signIn() async {
-    if (!GoogleAuthService.isSupported) {
-      error = 'O login com Google para sincronização está disponível nas plataformas Web, Android e iOS.\n\n'
-          'No macOS Desktop, suas cifras são salvas localmente no dispositivo.';
-      _update(AccountStatus.error);
-      return;
-    }
+  Future<void> signIn({String? desktopClientId}) async {
     _update(AccountStatus.working);
     try {
-      final u = await _auth.signIn();
+      final u = await _auth.signIn(desktopClientId: desktopClientId);
       if (u == null) {
         _update(AccountStatus.signedOut);
         return;
@@ -56,16 +50,27 @@ class AccountController extends ChangeNotifier {
     } catch (e) {
       error = '$e';
       _update(AccountStatus.error);
+      rethrow;
+    }
+  }
+
+  Future<void> signInDirectToken({
+    required String accessToken,
+    required String email,
+  }) async {
+    _update(AccountStatus.working);
+    try {
+      final u = await _auth.signInDirectToken(accessToken: accessToken, email: email);
+      await _setup(u);
+    } catch (e) {
+      error = '$e';
+      _update(AccountStatus.error);
+      rethrow;
     }
   }
 
   Future<void> retry() async {
-    final u = _auth.user;
-    if (u == null) {
-      await signIn();
-    } else {
-      await _setup(u);
-    }
+    await restore();
   }
 
   Future<void> signOut() async {
@@ -76,7 +81,7 @@ class AccountController extends ChangeNotifier {
     _update(AccountStatus.signedOut);
   }
 
-  Future<void> _setup(GoogleSignInAccount u) async {
+  Future<void> _setup(AuthUserInfo u) async {
     email = u.email;
     _update(AccountStatus.working);
     try {

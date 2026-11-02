@@ -52,7 +52,7 @@ class ExportService {
       fileName: fileName,
       type: FileType.custom,
       allowedExtensions: ['zip'],
-      bytes: bytes,
+      bytes: kIsWeb ? bytes : null,
     );
     if (path == null) return false;
     // No desktop o seletor só devolve o caminho; o arquivo é gravado aqui.

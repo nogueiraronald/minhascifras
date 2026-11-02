@@ -3,11 +3,18 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
-/// Login do Google feito pelo próprio usuário (tela do Google, sem senha no app).
-/// Escopo mínimo: o app só enxerga arquivos que ele mesmo criou.
+import 'desktop_auth_service.dart';
+
+class AuthUserInfo {
+  AuthUserInfo({required this.email, required this.authHeaders});
+  final String email;
+  final Map<String, String> authHeaders;
+}
+
+/// Serviço de autenticação Google multiplataforma (Web, Android, iOS e macOS Desktop).
 class GoogleAuthService {
   GoogleAuthService()
-      : _google = isSupported
+      : _google = !isDesktop
             ? GoogleSignIn(
                 scopes: const ['https://www.googleapis.com/auth/drive.file'],
               )
@@ -15,49 +22,94 @@ class GoogleAuthService {
 
   final GoogleSignIn? _google;
 
-  /// O Google Sign-In oficial do Flutter tem suporte nativo para Web, Android e iOS.
-  /// Em plataformas Desktop (macOS, Windows, Linux), o plugin não tem suporte de UI nativa.
-  static bool get isSupported {
-    if (kIsWeb) return true;
-    return Platform.isAndroid || Platform.isIOS;
+  static bool get isDesktop =>
+      !kIsWeb && (Platform.isMacOS || Platform.isWindows || Platform.isLinux);
+
+  String? _desktopEmail;
+  Map<String, String>? _desktopHeaders;
+
+  String? get currentEmail {
+    if (isDesktop) return _desktopEmail;
+    return _google?.currentUser?.email;
   }
 
-  GoogleSignInAccount? get user => _google?.currentUser;
+  bool get isSignedIn => currentEmail != null;
 
-  Future<GoogleSignInAccount?> signInSilently() async {
-    if (!isSupported || _google == null) return null;
-    try {
-      return await _google.signInSilently();
-    } catch (_) {
+  Future<AuthUserInfo?> signInSilently() async {
+    if (isDesktop) {
+      final user = await DesktopAuthService.restoreSession();
+      if (user != null) {
+        _desktopEmail = user.email;
+        _desktopHeaders = user.authHeaders;
+        return AuthUserInfo(email: user.email, authHeaders: user.authHeaders);
+      }
       return null;
     }
+
+    try {
+      final u = await _google?.signInSilently();
+      if (u != null) {
+        return AuthUserInfo(email: u.email, authHeaders: await u.authHeaders);
+      }
+    } catch (_) {}
+    return null;
   }
 
-  Future<GoogleSignInAccount?> signIn() async {
-    if (!isSupported || _google == null) {
-      throw UnsupportedError(
-        'O login com Google para sincronização em nuvem está disponível nas plataformas Web, Android e iOS.\n\n'
-        'No macOS Desktop, o aplicativo armazena suas cifras localmente com suporte offline completo e exportação/importação.',
-      );
+  Future<AuthUserInfo?> signIn({String? desktopClientId}) async {
+    if (isDesktop) {
+      var clientId = desktopClientId ?? await DesktopAuthService.getSavedClientId();
+      if (clientId.isEmpty) {
+        throw StateError('CLIENT_ID_REQUIRED');
+      }
+
+      final user = await DesktopAuthService.signInWithBrowser(clientId: clientId);
+      if (user != null) {
+        _desktopEmail = user.email;
+        _desktopHeaders = user.authHeaders;
+        return AuthUserInfo(email: user.email, authHeaders: user.authHeaders);
+      }
+      return null;
     }
-    try {
-      return await _google.signIn();
-    } catch (e) {
-      rethrow;
+
+    final u = await _google?.signIn();
+    if (u != null) {
+      return AuthUserInfo(email: u.email, authHeaders: await u.authHeaders);
     }
+    return null;
+  }
+
+  Future<AuthUserInfo> signInDirectToken({
+    required String accessToken,
+    required String email,
+  }) async {
+    final user = await DesktopAuthService.signInWithDirectToken(
+      accessToken: accessToken,
+      email: email,
+    );
+    _desktopEmail = user.email;
+    _desktopHeaders = user.authHeaders;
+    return AuthUserInfo(email: user.email, authHeaders: user.authHeaders);
   }
 
   Future<void> signOut() async {
-    if (_google != null) {
-      try {
-        await _google.signOut();
-      } catch (_) {}
+    if (isDesktop) {
+      await DesktopAuthService.signOut();
+      _desktopEmail = null;
+      _desktopHeaders = null;
+    } else {
+      await _google?.signOut();
     }
   }
 
-  /// Cabeçalhos com o token do usuário (Authorization: Bearer ...).
   Future<Map<String, String>> authHeaders() async {
-    final u = user;
+    if (isDesktop) {
+      if (_desktopHeaders != null) return _desktopHeaders!;
+      final user = DesktopAuthService.currentUser;
+      if (user != null) return user.authHeaders;
+      throw StateError('Usuário não está logado no desktop.');
+    }
+
+    final u = _google?.currentUser;
     if (u == null) throw StateError('Usuário não está logado.');
     return u.authHeaders;
   }
