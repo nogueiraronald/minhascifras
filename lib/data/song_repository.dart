@@ -45,6 +45,19 @@ class SongRepository extends ChangeNotifier {
     onLocalChange?.call();
   }
 
+  Future<void> saveAll(List<Song> songs) async {
+    for (final song in songs) {
+      final i = _songs.indexWhere((s) => s.id == song.id);
+      if (i >= 0) {
+        _songs[i] = song;
+      } else {
+        _songs.add(song);
+      }
+    }
+    await _persist();
+    onLocalChange?.call();
+  }
+
   Future<void> remove(String id) async {
     final i = _songs.indexWhere((s) => s.id == id);
     if (i < 0) return;

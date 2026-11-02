@@ -35,7 +35,7 @@ class SheetsService {
 
   /// Procura uma planilha já criada por este app nesta conta (outros aparelhos).
   Future<String?> _findExisting() async {
-    final q = "name='${SheetSchema.title}' and "
+    const q = "name='${SheetSchema.title}' and "
         "mimeType='application/vnd.google-apps.spreadsheet' and trashed=false";
     final uri = Uri.https('www.googleapis.com', '/drive/v3/files',
         {'q': q, 'fields': 'files(id)', 'orderBy': 'createdTime'});

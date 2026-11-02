@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/account_controller.dart';
+import '../services/google_auth_service.dart';
 
 class AccountButton extends StatelessWidget {
   const AccountButton({super.key, required this.account});
@@ -21,8 +22,14 @@ class AccountButton extends StatelessWidget {
             );
           case AccountStatus.signedOut:
             return TextButton.icon(
-              onPressed: account.signIn,
-              icon: const Icon(Icons.login),
+              onPressed: () {
+                if (!GoogleAuthService.isSupported) {
+                  _showDesktopInfoDialog(context);
+                } else {
+                  account.signIn();
+                }
+              },
+              icon: const Icon(Icons.cloud_outlined),
               label: const Text('Entrar com Google'),
             );
           case AccountStatus.ready:
@@ -36,6 +43,31 @@ class AccountButton extends StatelessWidget {
             );
         }
       },
+    );
+  }
+
+  void _showDesktopInfoDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.cloud_outlined, color: Colors.blue),
+            SizedBox(width: 8),
+            Text('Sincronização em Nuvem'),
+          ],
+        ),
+        content: const Text(
+          'O login com Google é usado para sincronizar cifras com o Google Sheets nas versões Web, Android e iOS.\n\n'
+          'No macOS Desktop, suas cifras ficam salvas com segurança no seu dispositivo em modo offline. Você pode exportar e importar arquivos (.zip ou .txt) a qualquer momento pelo menu!',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Entendido'),
+          ),
+        ],
+      ),
     );
   }
 

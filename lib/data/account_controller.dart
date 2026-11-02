@@ -39,6 +39,12 @@ class AccountController extends ChangeNotifier {
   }
 
   Future<void> signIn() async {
+    if (!GoogleAuthService.isSupported) {
+      error = 'O login com Google para sincronização está disponível nas plataformas Web, Android e iOS.\n\n'
+          'No macOS Desktop, suas cifras são salvas localmente no dispositivo.';
+      _update(AccountStatus.error);
+      return;
+    }
     _update(AccountStatus.working);
     try {
       final u = await _auth.signIn();
