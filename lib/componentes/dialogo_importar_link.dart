@@ -21,23 +21,47 @@ class ImportLinkDialog extends StatefulWidget {
 
 class _ImportLinkDialogState extends State<ImportLinkDialog> {
   final _controller = TextEditingController();
+  final _focusNode = FocusNode();
   bool _loading = false;
   String? _error;
 
   @override
   void dispose() {
     _controller.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
   Future<void> _pasteFromClipboard() async {
-    final data = await Clipboard.getData(Clipboard.kTextPlain);
-    final text = data?.text?.trim() ?? '';
-    if (text.isNotEmpty) {
-      setState(() {
-        _controller.text = text;
-        _error = null;
-      });
+    try {
+      final data = await Clipboard.getData(Clipboard.kTextPlain);
+      final text = data?.text?.trim() ?? '';
+      if (text.isNotEmpty) {
+        setState(() {
+          _controller.text = text;
+          _error = null;
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Link colado com sucesso!'),
+              duration: Duration(seconds: 1),
+            ),
+          );
+        }
+        return;
+      }
+    } catch (_) {}
+
+    // Fallback: se o navegador/Safari bloquear a leitura programática, foca no campo
+    _focusNode.requestFocus();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Toque no campo e selecione "Colar"'),
+          duration: Duration(seconds: 2),
+        ),
+      );
     }
   }
 
@@ -146,6 +170,7 @@ class _ImportLinkDialogState extends State<ImportLinkDialog> {
             ),
             child: TextField(
               controller: _controller,
+              focusNode: _focusNode,
               enabled: !_loading,
               autofocus: true,
               keyboardType: TextInputType.url,

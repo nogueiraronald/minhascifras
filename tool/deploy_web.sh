@@ -9,6 +9,10 @@ echo ""
 echo "🌐 [1/2] Compilando Web PWA com base-href..."
 flutter build web --release --base-href "/minhascifras-web/"
 
+# Garante o Service Worker offline em sw.js e substitui o dummy do Flutter
+cp web/sw.js build/web/sw.js
+cp web/sw.js build/web/flutter_service_worker.js
+
 echo ""
 echo "🚀 [2/2] Enviando para o repositório público minhascifras-web..."
 cd build/web
