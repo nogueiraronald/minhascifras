@@ -22,7 +22,22 @@ fi
 rm -f build/MinhasCifras.dmg
 hdiutil create -volname "Minhas Cifras" -srcfolder build/dmg_staging -ov -format UDZO build/MinhasCifras.dmg
 cp build/MinhasCifras.dmg "$HOME/Downloads/MinhasCifras.dmg" 2>/dev/null || true
-echo "✅ DMG criado em: build/MinhasCifras.dmg (e copiado para ~/Downloads/MinhasCifras.dmg)"
+
+# Aplica o ícone visual oficial diretamente sobre o arquivo .dmg no Finder
+if [ -f "macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_1024.png" ]; then
+  swift -e '
+  import Cocoa
+  if let icon = NSImage(contentsOfFile: "macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_1024.png") {
+    NSWorkspace.shared.setIcon(icon, forFile: "build/MinhasCifras.dmg", options: [])
+    let dlPath = NSString(string: "~/Downloads/MinhasCifras.dmg").expandingTildeInPath
+    if FileManager.default.fileExists(atPath: dlPath) {
+      NSWorkspace.shared.setIcon(icon, forFile: dlPath, options: [])
+    }
+  }
+  ' 2>/dev/null || true
+fi
+
+echo "✅ DMG criado em: build/MinhasCifras.dmg (e copiado para ~/Downloads/MinhasCifras.dmg com ícone oficial)"
 
 # 2. Web (PWA 100% Offline)
 echo ""
