@@ -4,8 +4,10 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../configuracao/configuracao_app.dart';
 
@@ -75,16 +77,30 @@ class DesktopAuthService {
     await prefs.setString(_kClientId, clientId.trim());
   }
 
-  /// Inicia o fluxo de login via navegador com servidor local loopback
+  /// Inicia o fluxo de login via navegador (Desktop ou Web)
   static Future<DesktopAuthUser?> signInWithBrowser({String? clientId}) async {
     final cleanClientId = (clientId ?? AppConfig.googleClientId).trim();
 
     // Salva o client ID para renovações futuras
     await saveClientId(cleanClientId);
 
-    // Gera PKCE code_verifier e code_challenge (RFC 7636)
-    final verifier = _generateCodeVerifier();
-    final challenge = _generateCodeChallenge(verifier);
+    // Se estiver rodando na Web (Safari iOS, Chrome, etc.)
+    if (kIsWeb) {
+      final authUrl = buildWebAuthUrl(clientId: cleanClientId);
+      final launched = await launchUrl(
+        authUrl,
+        mode: LaunchMode.platformDefault,
+        webOnlyWindowName: '_self',
+      );
+      if (!launched) {
+        await launchUrl(authUrl, mode: LaunchMode.externalApplication);
+      }
+      return null;
+    }
+
+    // Fluxo nativo Desktop (macOS, Windows, Linux) com loopback local
+    final verifier = generateCodeVerifier();
+    final challenge = generateCodeChallenge(verifier);
 
     // Inicia servidor HTTP local em porta efêmera no localhost
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -166,15 +182,90 @@ class DesktopAuthService {
       throw Exception('Tempo limite para login expirado.');
     }
 
-    // Troca o código pelo access_token
+    return exchangeCode(
+      clientId: cleanClientId,
+      authCode: authCode,
+      redirectUri: redirectUri,
+      codeVerifier: verifier,
+    );
+  }
+
+  /// Constrói a URL do Google OAuth para o navegador Web
+  static Uri buildWebAuthUrl({required String clientId}) {
+    final verifier = generateCodeVerifier();
+    final challenge = generateCodeChallenge(verifier);
+    final redirectUri = '${Uri.base.origin}${Uri.base.path}';
+
+    // Salva verifier nos SharedPreferences para troca quando a página recarregar
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setString('web_oauth_verifier', verifier);
+      prefs.setString('web_oauth_client_id', clientId);
+      prefs.setString('web_oauth_redirect_uri', redirectUri);
+    });
+
+    return Uri.https('accounts.google.com', '/o/oauth2/v2/auth', {
+      'client_id': clientId,
+      'redirect_uri': redirectUri,
+      'response_type': 'code',
+      'scope': 'https://www.googleapis.com/auth/drive.file email profile',
+      'code_challenge': challenge,
+      'code_challenge_method': 'S256',
+      'access_type': 'offline',
+      'prompt': 'consent',
+    });
+  }
+
+  /// Trata o retorno de autenticação via Web caso a URL contenha `?code=...`
+  static Future<DesktopAuthUser?> handleWebOAuthCallback() async {
+    if (!kIsWeb) return null;
+    final params = Uri.base.queryParameters;
+    final code = params['code'];
+    final error = params['error'];
+
+    if (error != null) {
+      throw Exception('Google retornou erro no login: $error');
+    }
+
+    if (code == null || code.isEmpty) return null;
+
+    final prefs = await SharedPreferences.getInstance();
+    final lastProcessed = prefs.getString('web_oauth_last_code');
+    if (lastProcessed == code) {
+      return restoreSession();
+    }
+
+    final verifier = prefs.getString('web_oauth_verifier');
+    final clientId = prefs.getString('web_oauth_client_id') ?? AppConfig.googleClientId;
+    final redirectUri = prefs.getString('web_oauth_redirect_uri') ?? '${Uri.base.origin}${Uri.base.path}';
+
+    final user = await exchangeCode(
+      clientId: clientId,
+      authCode: code,
+      redirectUri: redirectUri,
+      codeVerifier: verifier,
+    );
+
+    await prefs.setString('web_oauth_last_code', code);
+    return user;
+  }
+
+  /// Troca o Authorization Code pelo Access Token e obtém dados do usuário
+  static Future<DesktopAuthUser> exchangeCode({
+    required String clientId,
+    required String authCode,
+    required String redirectUri,
+    String? codeVerifier,
+  }) async {
     final tokenUri = Uri.parse('https://oauth2.googleapis.com/token');
     final postBody = <String, String>{
-      'client_id': cleanClientId,
+      'client_id': clientId,
       'code': authCode,
-      'code_verifier': verifier,
       'grant_type': 'authorization_code',
       'redirect_uri': redirectUri,
     };
+    if (codeVerifier != null && codeVerifier.isNotEmpty) {
+      postBody['code_verifier'] = codeVerifier;
+    }
     if (AppConfig.googleClientSecret.isNotEmpty) {
       postBody['client_secret'] = AppConfig.googleClientSecret;
     }
@@ -222,7 +313,7 @@ class DesktopAuthService {
       name: userName,
     );
 
-    return _currentUser;
+    return _currentUser!;
   }
 
   /// Permite autenticar diretamente com um token informado
@@ -274,13 +365,13 @@ class DesktopAuthService {
     _currentUser = null;
   }
 
-  static String _generateCodeVerifier() {
+  static String generateCodeVerifier() {
     final random = Random.secure();
     final values = List<int>.generate(32, (i) => random.nextInt(256));
     return base64UrlEncode(values).replaceAll('=', '');
   }
 
-  static String _generateCodeChallenge(String verifier) {
+  static String generateCodeChallenge(String verifier) {
     final bytes = ascii.encode(verifier);
     final digest = sha256.convert(bytes);
     return base64UrlEncode(digest.bytes).replaceAll('=', '');

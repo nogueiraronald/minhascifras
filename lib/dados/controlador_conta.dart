@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../servicos/servico_autenticacao_desktop.dart';
 import '../servicos/servico_autenticacao_google.dart';
 import '../servicos/servico_planilhas_google.dart';
 
@@ -31,6 +32,15 @@ class AccountController extends ChangeNotifier {
   /// Retoma a sessão anterior sem abrir tela de login.
   Future<void> restore() async {
     try {
+      if (kIsWeb && Uri.base.queryParameters.containsKey('code')) {
+        final webUser = await DesktopAuthService.handleWebOAuthCallback();
+        if (webUser != null) {
+          final userInfo = AuthUserInfo(email: webUser.email, authHeaders: webUser.authHeaders);
+          await _setup(userInfo);
+          return;
+        }
+      }
+
       final u = await _auth.signInSilently();
       if (u != null) await _setup(u);
     } catch (_) {

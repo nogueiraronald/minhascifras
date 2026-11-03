@@ -2,7 +2,9 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../configuracao/configuracao_app.dart';
 import 'servico_autenticacao_desktop.dart';
 
 class AuthUserInfo {
@@ -16,7 +18,11 @@ class GoogleAuthService {
   GoogleAuthService()
       : _google = !isDesktop
             ? GoogleSignIn(
-                scopes: const ['https://www.googleapis.com/auth/drive.file'],
+                clientId: AppConfig.googleClientId,
+                scopes: const [
+                  'https://www.googleapis.com/auth/drive.file',
+                  'email',
+                ],
               )
             : null;
 
@@ -29,35 +35,42 @@ class GoogleAuthService {
   Map<String, String>? _desktopHeaders;
 
   String? get currentEmail {
-    if (isDesktop) return _desktopEmail;
+    if (_desktopEmail != null) return _desktopEmail;
+    final savedUser = DesktopAuthService.currentUser;
+    if (savedUser != null) return savedUser.email;
     return _google?.currentUser?.email;
   }
 
   bool get isSignedIn => currentEmail != null;
 
   Future<AuthUserInfo?> signInSilently() async {
-    if (isDesktop) {
-      final user = await DesktopAuthService.restoreSession();
-      if (user != null) {
-        _desktopEmail = user.email;
-        _desktopHeaders = user.authHeaders;
-        return AuthUserInfo(email: user.email, authHeaders: user.authHeaders);
-      }
-      return null;
+    // 1. Tenta restaurar sessão salva (funciona tanto em Desktop quanto na Web)
+    final user = await DesktopAuthService.restoreSession();
+    if (user != null) {
+      _desktopEmail = user.email;
+      _desktopHeaders = user.authHeaders;
+      return AuthUserInfo(email: user.email, authHeaders: user.authHeaders);
     }
 
-    try {
-      final u = await _google?.signInSilently();
-      if (u != null) {
-        return AuthUserInfo(email: u.email, authHeaders: await u.authHeaders);
-      }
-    } catch (_) {}
+    // 2. Se não estiver no desktop, tenta silent sign in pelo GoogleSignIn
+    if (!isDesktop) {
+      try {
+        final u = await _google?.signInSilently();
+        if (u != null) {
+          return AuthUserInfo(email: u.email, authHeaders: await u.authHeaders);
+        }
+      } catch (_) {}
+    }
     return null;
   }
 
   Future<AuthUserInfo?> signIn({String? desktopClientId}) async {
+    final cleanClientId = (desktopClientId != null && desktopClientId.trim().isNotEmpty)
+        ? desktopClientId.trim()
+        : AppConfig.googleClientId;
+
     if (isDesktop) {
-      final user = await DesktopAuthService.signInWithBrowser(clientId: desktopClientId);
+      final user = await DesktopAuthService.signInWithBrowser(clientId: cleanClientId);
       if (user != null) {
         _desktopEmail = user.email;
         _desktopHeaders = user.authHeaders;
@@ -66,7 +79,48 @@ class GoogleAuthService {
       return null;
     }
 
-    final u = await _google?.signIn();
+    // Fluxo Web (iPhone Safari, PWA, navegadores de desktop)
+    if (kIsWeb) {
+      // 1. Tenta login via Google Identity Services
+      try {
+        final googleInstance = GoogleSignIn(
+          clientId: cleanClientId,
+          scopes: const [
+            'https://www.googleapis.com/auth/drive.file',
+            'email',
+          ],
+        );
+        final u = await googleInstance.signIn();
+        if (u != null) {
+          return AuthUserInfo(email: u.email, authHeaders: await u.authHeaders);
+        }
+      } catch (e) {
+        debugPrint('GoogleSignIn no Web falhou ou popup bloqueado: $e. Abrindo navegador com fluxo OAuth...');
+      }
+
+      // 2. Se o popup não abriu ou falhou, abre o navegador padrão com o fluxo OAuth direto
+      final authUrl = DesktopAuthService.buildWebAuthUrl(clientId: cleanClientId);
+      final launched = await launchUrl(
+        authUrl,
+        mode: LaunchMode.platformDefault,
+        webOnlyWindowName: '_self',
+      );
+      if (!launched) {
+        await launchUrl(authUrl, mode: LaunchMode.externalApplication);
+      }
+      return null;
+    }
+
+    // Fluxo Android / iOS compilado nativamente
+    final googleInstance = _google ??
+        GoogleSignIn(
+          clientId: cleanClientId,
+          scopes: const [
+            'https://www.googleapis.com/auth/drive.file',
+            'email',
+          ],
+        );
+    final u = await googleInstance.signIn();
     if (u != null) {
       return AuthUserInfo(email: u.email, authHeaders: await u.authHeaders);
     }
@@ -87,25 +141,24 @@ class GoogleAuthService {
   }
 
   Future<void> signOut() async {
-    if (isDesktop) {
-      await DesktopAuthService.signOut();
-      _desktopEmail = null;
-      _desktopHeaders = null;
-    } else {
-      await _google?.signOut();
+    await DesktopAuthService.signOut();
+    _desktopEmail = null;
+    _desktopHeaders = null;
+    if (!isDesktop) {
+      try {
+        await _google?.signOut();
+      } catch (_) {}
     }
   }
 
   Future<Map<String, String>> authHeaders() async {
-    if (isDesktop) {
-      if (_desktopHeaders != null) return _desktopHeaders!;
-      final user = DesktopAuthService.currentUser;
-      if (user != null) return user.authHeaders;
-      throw StateError('Usuário não está logado no desktop.');
-    }
+    if (_desktopHeaders != null) return _desktopHeaders!;
+    final user = DesktopAuthService.currentUser;
+    if (user != null) return user.authHeaders;
 
     final u = _google?.currentUser;
-    if (u == null) throw StateError('Usuário não está logado.');
-    return u.authHeaders;
+    if (u != null) return u.authHeaders;
+
+    throw StateError('Usuário não está conectado ao Google.');
   }
 }

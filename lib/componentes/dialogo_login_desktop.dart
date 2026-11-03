@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../configuracao/configuracao_app.dart';
@@ -71,10 +72,19 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
     try {
       await widget.account.signIn(desktopClientId: effectiveClientId);
       if (!mounted) return;
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Conectado como ${widget.account.email}! Sincronizando...')),
-      );
+      if (widget.account.status == AccountStatus.ready) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Conectado como ${widget.account.email}! Sincronizando...'),
+            backgroundColor: Colors.green[800],
+          ),
+        );
+      } else {
+        setState(() {
+          _loading = false;
+        });
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -280,7 +290,7 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
                 controller: _clientIdCtrl,
                 enabled: !_loading,
                 decoration: InputDecoration(
-                  labelText: 'Google Client ID (Desktop)',
+                  labelText: 'Google Client ID',
                   hintText: 'Padrão integrado do aplicativo',
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                   prefixIcon: const Icon(Icons.key, size: 18),
@@ -296,6 +306,31 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
                   if (_error != null) setState(() => _error = null);
                 },
               ),
+              if (kIsWeb) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'URI de redirecionamento (caso crie seu próprio Client ID no Google Cloud):',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue),
+                      ),
+                      const SizedBox(height: 4),
+                      SelectableText(
+                        '${Uri.base.origin}${Uri.base.path}',
+                        style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 8),
             ],
             InkWell(
