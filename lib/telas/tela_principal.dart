@@ -1972,132 +1972,226 @@ class _MainScreenState extends State<MainScreen> {
                 builder: (context, constraints) {
                   final isNarrow = constraints.maxWidth < 650;
 
-                  // Widget do Controle de Tom (compacto)
-                  final toneControl = Container(
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .surfaceContainerHighest
-                          .withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                          color: Colors.grey.withValues(alpha: 0.25)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
+                  // Widget do Controle de Tom
+                  Widget buildToneControl({bool isExpanded = false}) {
+                    final content = Row(
+                      mainAxisSize:
+                          isExpanded ? MainAxisSize.max : MainAxisSize.min,
+                      mainAxisAlignment: isExpanded
+                          ? MainAxisAlignment.spaceBetween
+                          : MainAxisAlignment.center,
                       children: [
                         IconButton(
                           tooltip: 'Diminuir meio tom',
-                          icon: const Icon(Icons.remove, size: 13),
-                          padding: const EdgeInsets.symmetric(horizontal: 2),
-                          constraints:
-                              const BoxConstraints(minWidth: 22, minHeight: 28),
+                          icon: const Icon(Icons.remove_rounded, size: 20),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                              minWidth: 38, minHeight: 38),
                           onPressed: () => _changeTranspose(-1),
                         ),
                         InkWell(
                           onTap: _transpose != 0 ? _resetTranspose : null,
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(6),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 4, vertical: 2),
-                            child: Text(
-                              displayKey,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 11,
-                                color: _transpose != 0 ? Colors.indigo : null,
-                              ),
+                                horizontal: 6, vertical: 4),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (displayKey != 'Tom') ...[
+                                  Text(
+                                    'Tom ',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant
+                                          .withValues(alpha: 0.8),
+                                    ),
+                                  ),
+                                ],
+                                Text(
+                                  displayKey,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 14,
+                                    color: _transpose != 0
+                                        ? Theme.of(context).colorScheme.primary
+                                        : null,
+                                  ),
+                                ),
+                                if (_transpose != 0) ...[
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    _transpose > 0
+                                        ? '(+$_transpose)'
+                                        : '($_transpose)',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .primary,
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
                         ),
                         IconButton(
                           tooltip: 'Aumentar meio tom',
-                          icon: const Icon(Icons.add, size: 13),
-                          padding: const EdgeInsets.symmetric(horizontal: 2),
-                          constraints:
-                              const BoxConstraints(minWidth: 22, minHeight: 28),
+                          icon: const Icon(Icons.add_rounded, size: 20),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                              minWidth: 38, minHeight: 38),
                           onPressed: () => _changeTranspose(1),
                         ),
                       ],
-                    ),
-                  );
+                    );
 
-                  // Widget do Controle de Fonte (no mesmo padrão visual do controle de tons)
-                  final fontControl = Container(
-                    height: 28,
+                    return Container(
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest
+                            .withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(19),
+                        border: Border.all(
+                            color: Colors.grey.withValues(alpha: 0.25)),
+                      ),
+                      child: isExpanded
+                          ? content
+                          : Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 2),
+                              child: content,
+                            ),
+                    );
+                  }
+
+                  // Widget do Controle de Fonte
+                  Widget buildFontControl({bool isExpanded = false}) {
+                    final content = Row(
+                      mainAxisSize:
+                          isExpanded ? MainAxisSize.max : MainAxisSize.min,
+                      mainAxisAlignment: isExpanded
+                          ? MainAxisAlignment.spaceBetween
+                          : MainAxisAlignment.center,
+                      children: [
+                        IconButton(
+                          tooltip: 'Diminuir fonte',
+                          icon: const Icon(Icons.remove_rounded, size: 20),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                              minWidth: 38, minHeight: 38),
+                          onPressed: () => _updateFontSize(_fontSize - 1),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 4),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.format_size_rounded,
+                                size: 16,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant
+                                    .withValues(alpha: 0.8),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${_fontSize.toInt()}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Aumentar fonte',
+                          icon: const Icon(Icons.add_rounded, size: 20),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                              minWidth: 38, minHeight: 38),
+                          onPressed: () => _updateFontSize(_fontSize + 1),
+                        ),
+                      ],
+                    );
+
+                    return Container(
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest
+                            .withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(19),
+                        border: Border.all(
+                            color: Colors.grey.withValues(alpha: 0.25)),
+                      ),
+                      child: isExpanded
+                          ? content
+                          : Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 2),
+                              child: content,
+                            ),
+                    );
+                  }
+
+                  // Widget de Navegação de Músicas e Passador de Cifras
+                  final songNav = Container(
+                    height: 38,
                     decoration: BoxDecoration(
                       color: Theme.of(context)
                           .colorScheme
                           .surfaceContainerHighest
-                          .withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(14),
+                          .withValues(alpha: 0.4),
+                      borderRadius: BorderRadius.circular(19),
                       border: Border.all(
-                          color: Colors.grey.withValues(alpha: 0.25)),
+                          color: Colors.grey.withValues(alpha: 0.2)),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
-                          tooltip: 'Diminuir fonte',
-                          icon: const Icon(Icons.remove, size: 13),
-                          padding: const EdgeInsets.symmetric(horizontal: 2),
-                          constraints:
-                              const BoxConstraints(minWidth: 22, minHeight: 28),
-                          onPressed: () => _updateFontSize(_fontSize - 1),
+                          tooltip: 'Música anterior (Seta ← ou Pedal)',
+                          icon: const Icon(Icons.skip_previous_rounded,
+                              size: 22),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                              minWidth: 38, minHeight: 38),
+                          onPressed:
+                              currentIndex > 0 ? () => _navigateSong(-1) : null,
                         ),
                         Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 4, vertical: 2),
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
                           child: Text(
-                            '${_fontSize.toInt()}',
+                            '${currentIndex >= 0 ? currentIndex + 1 : 1}/${visibleSongs.length}',
                             style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 11,
-                            ),
+                                fontSize: 12, fontWeight: FontWeight.bold),
                           ),
                         ),
                         IconButton(
-                          tooltip: 'Aumentar fonte',
-                          icon: const Icon(Icons.add, size: 13),
-                          padding: const EdgeInsets.symmetric(horizontal: 2),
-                          constraints:
-                              const BoxConstraints(minWidth: 22, minHeight: 28),
-                          onPressed: () => _updateFontSize(_fontSize + 1),
+                          tooltip: 'Próxima música (Seta → ou Pedal)',
+                          icon:
+                              const Icon(Icons.skip_next_rounded, size: 22),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                              minWidth: 38, minHeight: 38),
+                          onPressed: currentIndex < visibleSongs.length - 1
+                              ? () => _navigateSong(1)
+                              : null,
                         ),
                       ],
                     ),
-                  );
-
-                  // Widget de Navegação de Músicas e Passador de Cifras (compacto)
-                  final songNav = Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        tooltip: 'Música anterior (Seta ← ou Pedal)',
-                        icon: const Icon(Icons.skip_previous, size: 17),
-                        padding: const EdgeInsets.all(2),
-                        constraints:
-                            const BoxConstraints(minWidth: 22, minHeight: 28),
-                        onPressed:
-                            currentIndex > 0 ? () => _navigateSong(-1) : null,
-                      ),
-                      Text(
-                        '${currentIndex >= 0 ? currentIndex + 1 : 1}/${visibleSongs.length}',
-                        style: const TextStyle(
-                            fontSize: 10, fontWeight: FontWeight.bold),
-                      ),
-                      IconButton(
-                        tooltip: 'Próxima música (Seta → ou Pedal)',
-                        icon: const Icon(Icons.skip_next, size: 17),
-                        padding: const EdgeInsets.all(2),
-                        constraints:
-                            const BoxConstraints(minWidth: 22, minHeight: 28),
-                        onPressed: currentIndex < visibleSongs.length - 1
-                            ? () => _navigateSong(1)
-                            : null,
-                      ),
-                    ],
                   );
 
                   // Widget de Rolagem (Play/Pause, Scroll Manual e Velocidade)
@@ -2110,59 +2204,67 @@ class _MainScreenState extends State<MainScreen> {
                               ? 'Pausar rolagem'
                               : 'Iniciar rolagem automática',
                           icon: Icon(
-                              _isPlaying ? Icons.pause : Icons.play_arrow,
-                              size: 16),
-                          padding: const EdgeInsets.all(4),
-                          constraints:
-                              const BoxConstraints(minWidth: 28, minHeight: 28),
+                            _isPlaying
+                                ? Icons.pause_rounded
+                                : Icons.play_arrow_rounded,
+                            size: 22,
+                          ),
+                          style: IconButton.styleFrom(
+                            minimumSize: const Size(40, 40),
+                            padding: EdgeInsets.zero,
+                          ),
                           onPressed: _isPlaying ? _stopScroll : _startScroll,
                         ),
+                        const SizedBox(width: 4),
                         IconButton(
                           tooltip: 'Rolar para cima (Seta ↑ ou Pedal)',
-                          icon: const Icon(Icons.keyboard_arrow_up, size: 16),
-                          padding: const EdgeInsets.all(2),
-                          constraints:
-                              const BoxConstraints(minWidth: 20, minHeight: 28),
+                          icon: const Icon(Icons.keyboard_arrow_up_rounded,
+                              size: 24),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                              minWidth: 36, minHeight: 38),
                           onPressed: () => _scrollBy(-180),
                         ),
                         IconButton(
                           tooltip: 'Rolar para baixo (Seta ↓ ou Pedal)',
-                          icon: const Icon(Icons.keyboard_arrow_down, size: 16),
-                          padding: const EdgeInsets.all(2),
-                          constraints:
-                              const BoxConstraints(minWidth: 20, minHeight: 28),
+                          icon: const Icon(Icons.keyboard_arrow_down_rounded,
+                              size: 24),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                              minWidth: 36, minHeight: 38),
                           onPressed: () => _scrollBy(180),
                         ),
-                        // Pílula/Botão de velocidade - SEMPRE visível em qualquer tamanho de tela!
+                        const SizedBox(width: 4),
+                        // Pílula/Botão de velocidade
                         Tooltip(
                           message:
                               'Velocidade da rolagem (${_speed.toInt()} px/s) - Toque para ajustar',
                           child: InkWell(
-                            borderRadius: BorderRadius.circular(10),
+                            borderRadius: BorderRadius.circular(19),
                             onTap: _showSpeedDialog,
                             child: Container(
-                              height: 26,
+                              height: 38,
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 5, vertical: 2),
+                                  horizontal: 10, vertical: 4),
                               decoration: BoxDecoration(
                                 color: Theme.of(context)
                                     .colorScheme
                                     .surfaceContainerHighest
                                     .withValues(alpha: 0.5),
-                                borderRadius: BorderRadius.circular(10),
+                                borderRadius: BorderRadius.circular(19),
                                 border: Border.all(
                                     color: Colors.grey.withValues(alpha: 0.25)),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(Icons.speed,
-                                      size: 13, color: Colors.indigo),
-                                  const SizedBox(width: 2),
+                                  const Icon(Icons.speed_rounded,
+                                      size: 16, color: Colors.indigo),
+                                  const SizedBox(width: 4),
                                   Text(
                                     '${_speed.toInt()}',
                                     style: const TextStyle(
-                                        fontSize: 10,
+                                        fontSize: 13,
                                         fontWeight: FontWeight.bold),
                                   ),
                                 ],
@@ -2171,9 +2273,9 @@ class _MainScreenState extends State<MainScreen> {
                           ),
                         ),
                         if (showSlider) ...[
-                          const SizedBox(width: 4),
+                          const SizedBox(width: 8),
                           SizedBox(
-                            width: 80,
+                            width: 90,
                             child: Slider(
                               focusNode: _sliderFocusNode,
                               value: _speed,
@@ -2188,42 +2290,28 @@ class _MainScreenState extends State<MainScreen> {
                   }
 
                   if (isNarrow) {
-                    // LAYOUT DISPOSITIVO MENOR / CELULAR: 1 LINHA ÚNICA COMPACTA!
-                    // Tom, Fonte, Rolagem e Navegação cabem perfeitamente em uma só linha sem quebrar
-                    return Container(
-                      height: 34,
-                      alignment: Alignment.center,
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.center,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                    // LAYOUT DISPOSITIVO MOBILE: 2 LINHAS ESPAÇOSAS, NÍTIDAS E ERGONÔMICAS
+                    // Linha 1: Navegação de Músicas + Play/Pause & Rolagem Manual/Velocidade
+                    // Linha 2: Tom e Tamanho da Fonte com botões grandes e confortáveis
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             songNav,
-                            Container(
-                              height: 16,
-                              width: 1,
-                              color: Colors.grey.withValues(alpha: 0.3),
-                              margin: const EdgeInsets.symmetric(horizontal: 4),
-                            ),
                             buildAutoScroll(showSlider: false),
-                            Container(
-                              height: 16,
-                              width: 1,
-                              color: Colors.grey.withValues(alpha: 0.3),
-                              margin: const EdgeInsets.symmetric(horizontal: 4),
-                            ),
-                            toneControl,
-                            Container(
-                              height: 16,
-                              width: 1,
-                              color: Colors.grey.withValues(alpha: 0.3),
-                              margin: const EdgeInsets.symmetric(horizontal: 4),
-                            ),
-                            fontControl,
                           ],
                         ),
-                      ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(child: buildToneControl(isExpanded: true)),
+                            const SizedBox(width: 10),
+                            Expanded(child: buildFontControl(isExpanded: true)),
+                          ],
+                        ),
+                      ],
                     );
                   }
 
@@ -2238,19 +2326,19 @@ class _MainScreenState extends State<MainScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               songNav,
-                              const SizedBox(width: 10),
+                              const SizedBox(width: 12),
                               buildAutoScroll(showSlider: true),
                             ],
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 12),
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          toneControl,
-                          const SizedBox(width: 14),
-                          fontControl,
+                          buildToneControl(isExpanded: false),
+                          const SizedBox(width: 12),
+                          buildFontControl(isExpanded: false),
                         ],
                       ),
                     ],
