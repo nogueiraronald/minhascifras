@@ -319,13 +319,26 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'URI de redirecionamento (caso crie seu próprio Client ID no Google Cloud):',
+                        'Para conectar na Web, configure seu Client ID (tipo "Aplicativo da Web") no Google Cloud com:',
                         style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue),
                       ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        '1. Origem JavaScript autorizada:',
+                        style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600),
+                      ),
+                      SelectableText(
+                        Uri.base.origin,
+                        style: const TextStyle(fontSize: 11, fontFamily: 'monospace', color: Colors.indigo),
+                      ),
                       const SizedBox(height: 4),
+                      const Text(
+                        '2. URI de redirecionamento autorizada:',
+                        style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600),
+                      ),
                       SelectableText(
                         '${Uri.base.origin}${Uri.base.path}',
-                        style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
+                        style: const TextStyle(fontSize: 11, fontFamily: 'monospace', color: Colors.indigo),
                       ),
                     ],
                   ),
