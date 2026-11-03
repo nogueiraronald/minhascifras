@@ -1,11 +1,10 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import '../configuracao/configuracao_app.dart';
 import '../dados/controlador_conta.dart';
-import '../servicos/servico_autenticacao_desktop.dart';
 import 'estilo_app.dart';
 
+/// Diálogo de login seguro com Conta Google (Web e Desktop).
+/// O Google Client ID é 100% interno e transparente para o usuário.
 class DesktopLoginDialog extends StatefulWidget {
   const DesktopLoginDialog({super.key, required this.account});
 
@@ -23,60 +22,24 @@ class DesktopLoginDialog extends StatefulWidget {
 }
 
 class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
-  final _clientIdCtrl = TextEditingController();
-  final _tokenCtrl = TextEditingController();
-  final _emailCtrl = TextEditingController();
-
   bool _loading = false;
   String? _error;
-  bool _directTokenMode = false;
-  bool _showHelp = false;
 
-  @override
-  void initState() {
-    super.initState();
-    DesktopAuthService.getSavedClientId().then((val) {
-      if (mounted && val.isNotEmpty) {
-        _clientIdCtrl.text = val;
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _clientIdCtrl.dispose();
-    _tokenCtrl.dispose();
-    _emailCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loginWithBrowser() async {
-    final inputId = _clientIdCtrl.text.trim();
-    final effectiveClientId = inputId.isNotEmpty ? inputId : null;
-
-    if (effectiveClientId == null && AppConfig.googleClientId.contains('placeholder')) {
-      setState(() {
-        _error = 'Onde colocar o ID:\n'
-            '1. Cole o seu Client ID no campo de texto abaixo; OU\n'
-            '2. No arquivo lib/configuracao/configuracao_app.dart, substitua a linha 15 pelo seu Client ID.';
-        _showHelp = true;
-      });
-      return;
-    }
-
+  Future<void> _login() async {
     setState(() {
       _loading = true;
       _error = null;
     });
 
     try {
-      await widget.account.signIn(desktopClientId: effectiveClientId);
+      await widget.account.signIn();
       if (!mounted) return;
       if (widget.account.status == AccountStatus.ready) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Conectado como ${widget.account.email}! Sincronizando...'),
+            content: Text(
+                'Conectado como ${widget.account.email}! Sincronizando cifras...'),
             backgroundColor: Colors.green[800],
           ),
         );
@@ -89,33 +52,9 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = e.toString().replaceFirst(RegExp(r'^(Exception|StateError):\s*'), '');
-      });
-    }
-  }
-
-  Future<void> _loginWithToken() async {
-    final token = _tokenCtrl.text.trim();
-    final email = _emailCtrl.text.trim();
-    if (token.isEmpty || email.isEmpty) {
-      setState(() => _error = 'Preencha o Token e o E-mail.');
-      return;
-    }
-
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-
-    try {
-      await widget.account.signInDirectToken(accessToken: token, email: email);
-      if (!mounted) return;
-      Navigator.pop(context);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _error = '$e';
+        _error = e
+            .toString()
+            .replaceFirst(RegExp(r'^(Exception|StateError):\s*'), '');
       });
     }
   }
@@ -125,6 +64,7 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isLogged = widget.account.status == AccountStatus.ready;
 
+    // Usuário já conectado
     if (isLogged) {
       return CartaoDialogoModerno(
         width: 440,
@@ -181,7 +121,7 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
                 ),
               ),
               child: Text(
-                'Suas cifras e listas estão sincronizadas com segurança com o Google Drive.',
+                'Suas cifras e setlists estão sincronizadas com segurança com o seu Google Drive.',
                 style: TextStyle(
                   fontSize: 13,
                   color: isDark ? Colors.grey[300] : Colors.grey[700],
@@ -197,7 +137,8 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
                     widget.account.signOut();
                     Navigator.pop(context);
                   },
-                  child: const Text('Desconectar / Sair', style: TextStyle(color: Colors.red)),
+                  child: const Text('Desconectar / Sair',
+                      style: TextStyle(color: Colors.red)),
                 ),
                 const SizedBox(width: 8),
                 BotaoGradiente(
@@ -212,8 +153,9 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
       );
     }
 
+    // Usuário não conectado
     return CartaoDialogoModerno(
-      width: 480,
+      width: 440,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -253,7 +195,7 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
           ),
           const SizedBox(height: 16),
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: AppCores.roxo.withValues(alpha: isDark ? 0.12 : 0.06),
               borderRadius: BorderRadius.circular(12),
@@ -262,15 +204,16 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.lock_open_rounded, color: AppCores.roxo, size: 20),
-                const SizedBox(width: 10),
+                const Icon(Icons.shield_outlined,
+                    color: AppCores.roxo, size: 22),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'O aplicativo abrirá o seu navegador para você digitar seu e-mail e senha do Google com total segurança.\n\n'
-                    'Após a aprovação, suas cifras locais são sincronizadas com sua planilha no Google Drive sem duplicidade.',
+                    'Faça login com sua Conta Google com total segurança e sem nenhum custo.\n\n'
+                    'Suas cifras e setlists ficam salvas na nuvem para você acessar de qualquer aparelho.',
                     style: TextStyle(
-                      fontSize: 12.5,
-                      height: 1.35,
+                      fontSize: 13,
+                      height: 1.4,
                       color: isDark ? Colors.grey[300] : Colors.grey[800],
                     ),
                   ),
@@ -278,115 +221,8 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
               ],
             ),
           ),
-          const SizedBox(height: 14),
-          if (!_directTokenMode) ...[
-            if (_showHelp) ...[
-              const Text(
-                'Client ID personalizado (opcional):',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 6),
-              TextField(
-                controller: _clientIdCtrl,
-                enabled: !_loading,
-                decoration: InputDecoration(
-                  labelText: 'Google Client ID',
-                  hintText: 'Padrão integrado do aplicativo',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                  prefixIcon: const Icon(Icons.key, size: 18),
-                  isDense: true,
-                  suffixIcon: _clientIdCtrl.text.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear, size: 16),
-                          onPressed: () => setState(() => _clientIdCtrl.clear()),
-                        )
-                      : null,
-                ),
-                onChanged: (_) {
-                  if (_error != null) setState(() => _error = null);
-                },
-              ),
-              if (kIsWeb) ...[
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Para conectar na Web, configure seu Client ID (tipo "Aplicativo da Web") no Google Cloud com:',
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue),
-                      ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        '1. Origem JavaScript autorizada:',
-                        style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600),
-                      ),
-                      SelectableText(
-                        Uri.base.origin,
-                        style: const TextStyle(fontSize: 11, fontFamily: 'monospace', color: Colors.indigo),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        '2. URI de redirecionamento autorizada:',
-                        style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600),
-                      ),
-                      SelectableText(
-                        '${Uri.base.origin}${Uri.base.path}',
-                        style: const TextStyle(fontSize: 11, fontFamily: 'monospace', color: Colors.indigo),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-              const SizedBox(height: 8),
-            ],
-            InkWell(
-              borderRadius: BorderRadius.circular(6),
-              onTap: () => setState(() => _showHelp = !_showHelp),
-              child: Row(
-                children: [
-                  Icon(
-                    _showHelp ? Icons.keyboard_arrow_up : Icons.tune,
-                    size: 16,
-                    color: AppCores.roxo,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    _showHelp ? 'Ocultar opções avançadas' : 'Opções avançadas (personalizar Client ID)',
-                    style: const TextStyle(fontSize: 12, color: AppCores.roxo, fontWeight: FontWeight.w600),
-                  ),
-                ],
-              ),
-            ),
-          ] else ...[
-            TextField(
-              controller: _emailCtrl,
-              enabled: !_loading,
-              decoration: InputDecoration(
-                labelText: 'Seu E-mail Google',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                isDense: true,
-              ),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _tokenCtrl,
-              enabled: !_loading,
-              decoration: InputDecoration(
-                labelText: 'Access Token do Google',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                isDense: true,
-              ),
-            ),
-          ],
           if (_error != null) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
@@ -396,40 +232,34 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
               ),
               child: Text(
                 _error!,
-                style: const TextStyle(color: Colors.red, fontSize: 12, height: 1.3),
+                style: const TextStyle(
+                    color: Colors.red, fontSize: 12, height: 1.3),
               ),
             ),
           ],
           if (_loading) ...[
-            const SizedBox(height: 14),
+            const SizedBox(height: 16),
             const Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2)),
                 SizedBox(width: 12),
-                Text('Aguardando aprovação no seu navegador...', style: TextStyle(fontSize: 13)),
+                Text('Conectando ao Google...', style: TextStyle(fontSize: 13)),
               ],
             ),
           ],
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
-              onPressed: _loading ? null : () => setState(() => _directTokenMode = !_directTokenMode),
-              child: Text(
-                _directTokenMode ? 'Voltar para Login via Navegador' : 'Ou colar Token de Acesso direto',
-                style: const TextStyle(fontSize: 11),
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 20),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               TextButton(
                 onPressed: _loading ? null : () => Navigator.pop(context),
                 style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
                 ),
                 child: Text(
                   'Cancelar',
@@ -441,12 +271,10 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
               ),
               const SizedBox(width: 8),
               BotaoGradiente(
-                onPressed: _loading
-                    ? null
-                    : (_directTokenMode ? _loginWithToken : _loginWithBrowser),
+                onPressed: _loading ? null : _login,
                 isLoading: _loading,
-                icon: Icons.open_in_browser_rounded,
-                label: 'Fazer Login no Navegador',
+                icon: Icons.login_rounded,
+                label: 'Entrar com Google',
               ),
             ],
           ),

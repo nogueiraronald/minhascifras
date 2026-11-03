@@ -7,11 +7,11 @@ class AppConfig {
 
   /// Google OAuth 2.0 Client ID padrão para Desktop (macOS, Windows, Linux).
   static const String googleClientId =
-      '202264815644.apps.googleusercontent.com';
+      '939106707928-204229furumo56sqd7lqck6aojjagejl.apps.googleusercontent.com';
 
   /// Google OAuth 2.0 Client ID específico para Web / PWA (Aplicativo da Web).
   static const String googleWebClientId =
-      '202264815644.apps.googleusercontent.com';
+      '939106707928-204229furumo56sqd7lqck6aojjagejl.apps.googleusercontent.com';
 
   /// Retorna o Client ID padrão para a plataforma
   static String get effectiveClientId => googleClientId;
