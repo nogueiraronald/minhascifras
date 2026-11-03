@@ -16,6 +16,9 @@ dependencies:
   google_sign_in: ^6.2.1
   http: ^1.2.0
   crypto: ^3.0.3
+  audioplayers: ^6.7.1
+  url_launcher: ^6.3.3
+  youtube_explode_dart: ^3.1.0
 
 dev_dependencies:
   flutter_test:

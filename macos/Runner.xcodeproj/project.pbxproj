@@ -712,6 +712,7 @@
 				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				ARCHS = arm64;
 			};
 			name = Release;
 		};
@@ -751,6 +752,7 @@
 				);
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_VERSION = 5.0;
+				ARCHS = arm64;
 			};
 			name = Release;
 		};
@@ -767,6 +769,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				ARCHS = arm64;
 			};
 			name = Release;
 		};

@@ -2,12 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'app.dart';
-import 'data/account_controller.dart';
-import 'data/chord_library.dart';
-import 'data/setlist_repository.dart';
-import 'data/song_repository.dart';
-import 'services/sync_service.dart';
+import 'aplicativo.dart';
+import 'dados/controlador_conta.dart';
+import 'dados/biblioteca_acordes.dart';
+import 'dados/repositorio_listas.dart';
+import 'dados/repositorio_musicas.dart';
+import 'dados/controlador_tema.dart';
+import 'dados/repositorio_temas.dart';
+import 'servicos/servico_sincronizacao.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,8 +17,18 @@ Future<void> main() async {
   final chords = await ChordLibrary.open();
   final account = await AccountController.open();
   final setlists = await SetlistRepository.open();
+  final theme = await ThemeController.open();
+  final musicThemes = await ThemeRepository.open();
   final sync = SyncService(repository, setlists, account);
   // Não bloqueia a abertura: o app funciona offline mesmo sem login.
   unawaited(account.restore());
-  runApp(CifrasApp(repository: repository, chords: chords, account: account, sync: sync, setlists: setlists));
+  runApp(CifrasApp(
+    repository: repository,
+    chords: chords,
+    account: account,
+    sync: sync,
+    setlists: setlists,
+    theme: theme,
+    musicThemes: musicThemes,
+  ));
 }
