@@ -26,9 +26,22 @@ if [ ! -d ".git" ] || [ "$(git remote get-url origin 2>/dev/null)" != "git@githu
   git reset --soft origin/main 2>/dev/null || true
 fi
 
+git config core.sshCommand "ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes" 2>/dev/null || true
 git add -A
 git commit -m "Atualização da PWA: $(date '+%d/%m/%Y %H:%M')" || echo "Nenhuma alteração pendente"
-git push origin main
+
+# Tentativa de push com retry automático em caso de rate-limit do GitHub
+max_attempts=3
+attempt=1
+until git push origin main; do
+  if [ $attempt -ge $max_attempts ]; then
+    echo "❌ Falha ao enviar para o GitHub após $attempt tentativas."
+    exit 1
+  fi
+  echo "Aguardando 2 segundos para tentar novamente (tentativa $attempt/$max_attempts)..."
+  sleep 2
+  attempt=$((attempt+1))
+done
 
 echo ""
 echo "=========================================="
