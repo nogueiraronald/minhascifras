@@ -1,7 +1,10 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import '../servicos/recarregador_pagina.dart';
 
 import '../dados/controlador_conta.dart';
 import '../dados/biblioteca_acordes.dart';
@@ -1117,17 +1120,44 @@ class _MainScreenState extends State<MainScreen> {
     );
 
     if (confirm == true) {
+      // 1. Apaga do repositório local e das listas de repertório
       await widget.repository.removeAll();
       await widget.setlists.removeAllItems();
-      setState(() {
-        _currentSong = null;
-        _currentSetlistItem = null;
-        _transpose = 0;
-      });
+
+      // 2. Limpa o leitor de cifras, descarrega áudio e reseta buscas
       if (mounted) {
+        setState(() {
+          _currentSong = null;
+          _currentSetlistItem = null;
+          _transpose = 0;
+          _searchController.clear();
+          _themeSearchController.clear();
+          _setlistSearchController.clear();
+        });
+        _initKaraokeController(null);
+      }
+
+      // 3. Sincroniza a exclusão com a nuvem imediatamente
+      try {
+        await widget.sync.sync();
+      } catch (_) {}
+
+      // 4. Na Web, recarrega a página para reiniciar a aplicação limpa
+      if (kIsWeb) {
+        reloadWebPage();
+        return;
+      }
+
+      // 5. Em dispositivos nativos, fecha drawer se aberto e exibe confirmação
+      if (mounted) {
+        final scaffoldState = Scaffold.maybeOf(context);
+        if (scaffoldState?.isDrawerOpen ?? false) {
+          scaffoldState?.closeDrawer();
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text('Todas as músicas foram excluídas da biblioteca.')),
+            content: Text('Todas as músicas foram excluídas da biblioteca.'),
+          ),
         );
       }
     }
@@ -1673,6 +1703,22 @@ class _MainScreenState extends State<MainScreen> {
 
   // --- Interface do Músico (Reader) ---
   Widget _buildMusicianReader(bool isMobile) {
+    // Validação reativa: se a música atual foi apagada da biblioteca, descarrega imediatamente
+    if (_currentSong != null &&
+        !widget.repository.songs.any((s) => s.id == _currentSong!.id)) {
+      final available = _getVisibleSongs();
+      if (available.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _selectSong(available.first);
+        });
+      } else {
+        _currentSong = null;
+        _currentSetlistItem = null;
+        _transpose = 0;
+        _initKaraokeController(null);
+      }
+    }
+
     if (_currentSong == null) {
       return Center(
         child: Padding(

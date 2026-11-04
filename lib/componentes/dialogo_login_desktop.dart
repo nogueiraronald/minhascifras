@@ -2,9 +2,12 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+
+import '../servicos/recarregador_pagina.dart';
 
 import '../dados/controlador_conta.dart';
 import '../dados/repositorio_listas.dart';
@@ -429,6 +432,10 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
       if (mounted) {
         setState(() => _loading = false);
         Navigator.pop(context);
+        if (kIsWeb) {
+          reloadWebPage();
+          return;
+        }
         messenger.showSnackBar(
           SnackBar(
             content: Text(
