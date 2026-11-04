@@ -22,7 +22,6 @@ self.addEventListener('install', (event) => {
         'main.dart.js',
         'manifest.json',
         'favicon.png',
-        'version.json',
         'icons/Icon-192.png',
         'icons/Icon-512.png',
         'assets/FontManifest.json',
@@ -107,6 +106,18 @@ self.addEventListener('fetch', (event) => {
     url.origin.includes('youtube.com') ||
     url.origin.includes('youtu.be')
   ) {
+    return;
+  }
+
+  // Sempre busca version.json fresco da rede para detecção instantânea de novas versões
+  if (url.pathname.endsWith('version.json')) {
+    event.respondWith(
+      fetch(request, { cache: 'no-store' }).catch(() => {
+        return new Response('{"offline": true}', {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      })
+    );
     return;
   }
 

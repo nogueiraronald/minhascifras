@@ -36,6 +36,7 @@ import '../componentes/estilo_app.dart';
 import '../servicos/controlador_audio_karaoke.dart';
 import '../componentes/barra_player_karaoke.dart';
 import '../componentes/player_youtube_embutido.dart';
+import '../servicos/servico_atualizacao_pwa.dart';
 
 /// Modos de exibição da música: Cifra completa, Letra pura ou Partitura musical.
 enum SongDisplayMode {
@@ -4552,6 +4553,10 @@ class _MainScreenState extends State<MainScreen> {
                                 widget.theme?.toggle(context);
                               } else if (val == 'sync') {
                                 await widget.sync.sync();
+                              } else if (val == 'check_update') {
+                                if (context.mounted) {
+                                  await ServicoAtualizacaoPwa.verificarAtualizacao(context);
+                                }
                               } else if (val == 'account') {
                                 DesktopLoginDialog.show(
                                   context,
@@ -4633,6 +4638,23 @@ class _MainScreenState extends State<MainScreen> {
                                         widget.account.syncCode != null
                                             ? 'Sincronização Nuvem (${widget.account.syncCode})'
                                             : 'Sincronização em Nuvem',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'check_update',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.system_update_rounded,
+                                        size: 18, color: Colors.purpleAccent),
+                                    SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        'Verificar Atualizações do App',
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),

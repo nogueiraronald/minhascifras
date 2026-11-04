@@ -26,7 +26,7 @@ echo "📦 Coletando todos os assets reais de build/web para precache garantido.
 ASSETS_JSON=$(python3 -c "
 import os, json
 root = 'build/web'
-ignore = {'.git', '.last_build_id', 'sw.js', 'flutter_service_worker.js', '.DS_Store', '404.html'}
+ignore = {'.git', '.last_build_id', 'sw.js', 'flutter_service_worker.js', '.DS_Store', '404.html', 'version.json'}
 assets = [
     './',
     'index.html',
@@ -63,11 +63,22 @@ with open('build/web/sw.js', 'w') as f:
 # 2. Copia sw.js para flutter_service_worker.js para retrocompatibilidade
 cp build/web/sw.js build/web/flutter_service_worker.js
 
-# 3. Atualiza index.html com a versão única de build
-sed -i '' "s/__BUILD_VERSION__/$BUILD_VERSION/g" build/web/index.html
-sed -i '' "s/sw\.js?v=[^'\"]*/sw.js?v=$BUILD_VERSION/g" build/web/index.html
+# 3. Cria version.json no build/web
+python3 -c "
+import json
+data = {
+    'version': '$GIT_BRANCH',
+    'buildVersion': '$BUILD_VERSION',
+    'timestamp': $BUILD_TIMESTAMP
+}
+with open('build/web/version.json', 'w') as f:
+    json.dump(data, f, indent=2)
+"
 
-# 4. Cria 404.html como cópia de index.html para o GitHub Pages servir todas as rotas
+# 4. Atualiza index.html com a versão única de build
+sed -i '' "s/__BUILD_VERSION__/$BUILD_VERSION/g" build/web/index.html
+
+# 5. Cria 404.html como cópia de index.html para o GitHub Pages servir todas as rotas
 cp build/web/index.html build/web/404.html
 
 # 5. Ajusta flutter_bootstrap.js:
