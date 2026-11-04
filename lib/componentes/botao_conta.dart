@@ -67,16 +67,23 @@ class AccountButton extends StatelessWidget {
           case AccountStatus.ready:
           case AccountStatus.error:
             final isOk = account.status == AccountStatus.ready;
-            final tooltip = account.syncCode != null
-                ? 'Sincronização Ativa (${account.syncCode})'
-                : 'Sincronização em Nuvem';
+            final labelText = account.userEmail ?? account.syncCode ?? 'Entrar';
+            final tooltip = account.userEmail != null
+                ? 'Conectado como ${account.userEmail}'
+                : (account.syncCode != null
+                    ? 'Sincronização Ativa (${account.syncCode})'
+                    : 'Acessar com E-mail e Senha');
 
             if (compact) {
               return IconButton(
                 tooltip: tooltip,
                 icon: Icon(
-                  isOk ? Icons.cloud_done_outlined : Icons.cloud_off_outlined,
-                  color: isOk ? Colors.green : Colors.amber,
+                  account.isLoggedIn
+                      ? Icons.cloud_done_rounded
+                      : (isOk ? Icons.cloud_outlined : Icons.cloud_off_outlined),
+                  color: account.isLoggedIn
+                      ? Colors.green
+                      : (isOk ? Colors.white70 : Colors.amber),
                 ),
                 onPressed: () => _openDialog(context),
               );
@@ -85,10 +92,18 @@ class AccountButton extends StatelessWidget {
             return TextButton.icon(
               onPressed: () => _openDialog(context),
               icon: Icon(
-                isOk ? Icons.cloud_done_outlined : Icons.cloud_off_outlined,
-                color: isOk ? Colors.green : Colors.amber,
+                account.isLoggedIn
+                    ? Icons.cloud_done_rounded
+                    : (isOk ? Icons.cloud_outlined : Icons.cloud_off_outlined),
+                color: account.isLoggedIn
+                    ? Colors.green
+                    : (isOk ? Colors.white70 : Colors.amber),
               ),
-              label: Text(account.syncCode ?? 'Nuvem'),
+              label: Text(
+                labelText,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             );
         }
       },

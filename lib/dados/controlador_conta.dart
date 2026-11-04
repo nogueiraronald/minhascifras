@@ -16,15 +16,20 @@ class AccountController extends ChangeNotifier {
   final SharedPreferences _prefs;
   final SupabaseSyncService _supabaseSync;
 
+  static const String _kUserEmail = 'user_account_email';
   static const String _kSyncCode = 'supabase_sync_code';
   static const String _kSyncPasswordHash = 'supabase_sync_password_hash';
 
   AccountStatus status = AccountStatus.ready;
+  String? _userEmail;
   String? syncCode;
   String? passwordHash;
   String? pendingSyncCode;
   String? pendingPasswordHash;
   String? error;
+
+  bool get isLoggedIn => _userEmail != null && _userEmail!.trim().isNotEmpty;
+  String? get userEmail => _userEmail;
 
   bool get isPasswordProtected =>
       passwordHash != null && passwordHash!.isNotEmpty;
@@ -33,6 +38,12 @@ class AccountController extends ChangeNotifier {
   bool get hasPendingSync =>
       pendingSyncCode != null && pendingSyncCode!.isNotEmpty;
 
+  /// Converte um e-mail de forma determinística e segura para o código de sincronização do Supabase
+  static String emailToSyncCode(String email) {
+    final clean = email.trim().toLowerCase();
+    final digest = sha256.convert(utf8.encode(clean)).toString();
+    return 'USR_${digest.substring(0, 24).toUpperCase()}';
+  }
 
   /// Retorna a URL completa para pareamento instantâneo via QR Code
   String get syncUrl {
@@ -71,8 +82,8 @@ class AccountController extends ChangeNotifier {
     return text.toUpperCase();
   }
 
-  /// Mantido para compatibilidade com a UI
-  String? get email => syncCode != null ? 'Código: $syncCode' : null;
+  /// Retorna o e-mail ou identificador amigável da conta
+  String? get email => _userEmail ?? (syncCode != null ? 'Código: $syncCode' : null);
   String? get spreadsheetId => syncCode;
 
   static Future<AccountController> open(
@@ -84,10 +95,20 @@ class AccountController extends ChangeNotifier {
     return controller;
   }
 
-  /// Carrega o código existente, detecta link via QR Code (?sync=...) ou gera um código único na primeira abertura
+  /// Carrega a conta salva (e-mail ou código existente)
   Future<void> restore() async {
     try {
+      _userEmail = _prefs.getString(_kUserEmail);
       passwordHash = _prefs.getString(_kSyncPasswordHash);
+
+      if (_userEmail != null && _userEmail!.trim().isNotEmpty) {
+        syncCode = emailToSyncCode(_userEmail!);
+        await _prefs.setString(_kSyncCode, syncCode!);
+        status = AccountStatus.ready;
+        error = null;
+        notifyListeners();
+        return;
+      }
 
       // 1. Se foi aberto via leitura de QR Code (?sync=MC-XXXXXX)
       if (kIsWeb && Uri.base.queryParameters.containsKey('sync')) {
@@ -251,8 +272,94 @@ class AccountController extends ChangeNotifier {
     }
   }
 
+  /// Autentica ou vincula com E-mail e Senha no Supabase.
+  /// Se o e-mail já existir na nuvem, valida a senha e retorna o total de músicas remotas.
+  /// Se for novo, vincula e define a senha.
+  Future<int> loginWithEmailAndPassword({
+    required String emailInput,
+    required String passwordInput,
+    Future<void> Function()? onSync,
+  }) async {
+    final cleanEmail = emailInput.trim().toLowerCase();
+    if (cleanEmail.isEmpty || !cleanEmail.contains('@') || !cleanEmail.contains('.')) {
+      throw const FormatException('Por favor, informe um endereço de e-mail válido.');
+    }
+    final cleanPassword = passwordInput.trim();
+    if (cleanPassword.isEmpty) {
+      throw const FormatException('Por favor, digite uma senha de acesso.');
+    }
+
+    _update(AccountStatus.working);
+
+    try {
+      final code = emailToSyncCode(cleanEmail);
+      final typedHash = sha256.convert(utf8.encode(cleanPassword)).toString();
+
+      // Consulta se já existe esse repertório na nuvem
+      final remote = await _supabaseSync.readAll(code);
+
+      if (remote.songs.isNotEmpty || (remote.passwordHash != null && remote.passwordHash!.isNotEmpty)) {
+        if (remote.passwordHash != null && remote.passwordHash!.isNotEmpty) {
+          if (typedHash != remote.passwordHash) {
+            throw Exception('Senha incorreta para este e-mail. Por favor, verifique e tente novamente.');
+          }
+        }
+      }
+
+      await _prefs.setString(_kUserEmail, cleanEmail);
+      await _prefs.setString(_kSyncCode, code);
+      await _prefs.setString(_kSyncPasswordHash, typedHash);
+
+      _userEmail = cleanEmail;
+      syncCode = code;
+      passwordHash = typedHash;
+      pendingSyncCode = null;
+      pendingPasswordHash = null;
+      error = null;
+      _update(AccountStatus.ready);
+
+      if (onSync != null) {
+        await onSync();
+      }
+
+      return remote.songs.length;
+    } catch (e) {
+      error = '$e'.replaceFirst(RegExp(r'^(Exception|FormatException|StateError):\s*'), '');
+      _update(AccountStatus.error);
+      rethrow;
+    }
+  }
+
+  /// Desconecta o usuário deste aparelho, removendo o e-mail e credenciais salvas
+  Future<void> signOutUser({
+    Future<void> Function()? onClearLocalData,
+  }) async {
+    _update(AccountStatus.working);
+    await _prefs.remove(_kUserEmail);
+    await _prefs.remove(_kSyncCode);
+    await _prefs.remove(_kSyncPasswordHash);
+
+    _userEmail = null;
+    passwordHash = null;
+    pendingSyncCode = null;
+    pendingPasswordHash = null;
+
+    final newCode = _generateCode();
+    await _prefs.setString(_kSyncCode, newCode);
+    syncCode = newCode;
+    error = null;
+
+    if (onClearLocalData != null) {
+      await onClearLocalData();
+    }
+
+    _update(AccountStatus.ready);
+  }
+
   /// Desconecta do repertório atual e gera um novo código vazio do zero
   Future<String> resetToNewAccount() async {
+    await _prefs.remove(_kUserEmail);
+    _userEmail = null;
     final newCode = _generateCode();
     await _prefs.setString(_kSyncCode, newCode);
     await _prefs.remove(_kSyncPasswordHash);

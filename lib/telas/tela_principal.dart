@@ -3695,23 +3695,52 @@ class _MainScreenState extends State<MainScreen> {
           Expanded(
             child: visibleSongs.isEmpty
                 ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text(
-                        _searchQuery.isNotEmpty
-                            ? 'Nenhuma música encontrada para "$_searchQuery".'
-                            : (_tabIndex == 3
-                                ? 'Nenhuma música vinculada ao tema "$_selectedTheme".\nToque no botão "+" acima para adicionar músicas a este tema.'
-                                : (_tabIndex == 2
-                                    ? 'Nenhuma música nesta setlist.\nToque no menu para adicionar.'
-                                    : (_tabIndex == 1
-                                        ? 'Nenhuma música favoritada ainda.\nToque na estrela de qualquer cifra para favoritar.'
-                                        : 'Nenhuma música na biblioteca.\nToque em "Nova Cifra" para adicionar.'))),
-                        textAlign: TextAlign.center,
-                        style:
-                            const TextStyle(color: Colors.grey, fontSize: 13),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _searchQuery.isNotEmpty
+                                ? 'Nenhuma música encontrada para "$_searchQuery".'
+                                : (_tabIndex == 3
+                                    ? 'Nenhuma música vinculada ao tema "$_selectedTheme".\nToque no botão "+" acima para adicionar músicas a este tema.'
+                                    : (_tabIndex == 2
+                                        ? 'Nenhuma música nesta setlist.\nToque no menu para adicionar.'
+                                        : (_tabIndex == 1
+                                            ? 'Nenhuma música favoritada ainda.\nToque na estrela de qualquer cifra para favoritar.'
+                                            : 'Nenhuma música na biblioteca.\nToque em "Nova Cifra" para adicionar.'))),
+                            textAlign: TextAlign.center,
+                            style:
+                                const TextStyle(color: Colors.grey, fontSize: 13),
+                          ),
+                          if (_tabIndex == 0 &&
+                              _searchQuery.isEmpty &&
+                              !widget.account.isLoggedIn) ...[
+                            const SizedBox(height: 16),
+                            FilledButton.icon(
+                              style: FilledButton.styleFrom(
+                                backgroundColor: AppCores.roxo,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 10),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12)),
+                              ),
+                              onPressed: () {
+                                DesktopLoginDialog.show(
+                                  context,
+                                  widget.account,
+                                  songs: widget.repository,
+                                  setlists: widget.setlists,
+                                  sync: widget.sync,
+                                );
+                              },
+                              icon: const Icon(Icons.cloud_download_rounded,
+                                  size: 18),
+                              label: const Text(
+                                  'Já tem músicas? Entrar com E-mail'),
+                            ),
+                          ],
+                        ],
                       ),
-                    ),
                   )
                 : (_tabIndex == 2 &&
                         _selectedSetlist != null &&
