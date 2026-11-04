@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
@@ -130,7 +131,7 @@ class KaraokeAudioController extends ChangeNotifier {
 
     if (enableNativeAudio) {
       _initNativePlayer();
-      if (song.hasAudio && isYoutube) {
+      if (song.hasAudio && isYoutube && !kIsWeb) {
         _preloadFuture = _preloadCaptionsAndAudio();
       }
     }
@@ -176,11 +177,19 @@ class KaraokeAudioController extends ChangeNotifier {
 
   /// Pré-carrega legendas e fluxo de áudio do YouTube em segundo plano
   Future<void> _preloadCaptionsAndAudio() async {
-    if (!song.hasAudio || !isYoutube) return;
+    if (!song.hasAudio || !isYoutube || kIsWeb) return;
     final url = song.audioUrl!.trim();
 
     try {
-      final yt = YoutubeExplode();
+      await _extractYoutubeStream(url).timeout(const Duration(seconds: 4));
+    } catch (e) {
+      debugPrint('Aviso no pré-carregamento do YouTube: $e');
+    }
+  }
+
+  Future<void> _extractYoutubeStream(String url) async {
+    final yt = YoutubeExplode();
+    try {
       final ytId = Song.extractYoutubeVideoId(url) ?? url;
       final videoId = VideoId(ytId);
 
@@ -232,9 +241,8 @@ class KaraokeAudioController extends ChangeNotifier {
         }
         _resolvedStreamUrl = streamToPlay.url.toString();
       }
+    } finally {
       yt.close();
-    } catch (e) {
-      debugPrint('Erro no pré-carregamento do YouTube: $e');
     }
   }
 
@@ -651,81 +659,48 @@ class KaraokeAudioController extends ChangeNotifier {
 
     // 1. YouTube: resolve áudio real em MP4/AAC e obtém legendas temporizadas
     if (isYoutube) {
+      if (kIsWeb) {
+        // No navegador web (PWA), CORS impede a extração direta do fluxo de áudio do YouTube.
+        // O app abre diretamente no YouTube externo oficial e não trava o loading.
+        _isLoadingAudio = false;
+        _isPlaying = false;
+        notifyListeners();
+        await openExternalApp();
+        return;
+      }
+
       if (_resolvedStreamUrl == null) {
         _isLoadingAudio = true;
         _errorMessage = null;
         notifyListeners();
 
-        // Se o pré-carregamento estiver em andamento, aguarda sua conclusão
+        // Se o pré-carregamento estiver em andamento, aguarda com timeout
         if (_preloadFuture != null) {
           try {
-            await _preloadFuture;
+            await _preloadFuture!.timeout(const Duration(seconds: 4));
           } catch (_) {}
         }
 
-        // Se ainda não tiver resolvido, faz a extração direta
+        // Se ainda não tiver resolvido, faz a extração direta com timeout de 5s
         if (_resolvedStreamUrl == null) {
           try {
-            final yt = YoutubeExplode();
-            final ytId = Song.extractYoutubeVideoId(url) ?? url;
-            final videoId = VideoId(ytId);
-
-            try {
-              final video = await yt.videos.get(videoId);
-              if (video.duration != null && video.duration! > Duration.zero) {
-                _totalDuration = video.duration!;
-              }
-            } catch (_) {}
-
-            if (_captions.isEmpty) {
-              try {
-                final captionManifest = await yt.videos.closedCaptions.getManifest(videoId);
-                ClosedCaptionTrackInfo? selectedTrack;
-                final ptTracks = captionManifest.getByLanguage('pt');
-                if (ptTracks.isNotEmpty) {
-                  selectedTrack = ptTracks.first;
-                } else if (captionManifest.tracks.isNotEmpty) {
-                  selectedTrack = captionManifest.tracks.first;
-                }
-
-                if (selectedTrack != null) {
-                  final track = await yt.videos.closedCaptions.get(selectedTrack);
-                  _captions = track.captions.toList();
-                  _detectFirstVocalTimestamp();
-                  _updateDynamicMatching(_currentPosition);
-                }
-              } catch (e) {
-                debugPrint('Legendas não disponíveis para este vídeo: $e');
-              }
-            }
-
-            final manifest = await yt.videos.streamsClient.getManifest(videoId);
-            StreamInfo? streamToPlay;
-            final muxedMp4 = manifest.muxed.where((s) => s.container.name.toLowerCase() == 'mp4').toList();
-            if (muxedMp4.isNotEmpty) {
-              streamToPlay = muxedMp4.first;
-            } else {
-              final audioMp4 = manifest.audioOnly.where((s) => s.container.name.toLowerCase() == 'mp4').toList();
-              if (audioMp4.isNotEmpty) {
-                streamToPlay = audioMp4.withHighestBitrate();
-              } else {
-                streamToPlay = manifest.audioOnly.withHighestBitrate();
-              }
-            }
-
-            _resolvedStreamUrl = streamToPlay.url.toString();
-            yt.close();
+            await _extractYoutubeStream(url).timeout(const Duration(seconds: 5));
           } catch (e) {
             debugPrint('Erro ao extrair áudio do YouTube: $e');
             _isLoadingAudio = false;
             _errorMessage = 'Não foi possível carregar áudio do YouTube.';
             _isPlaying = false;
             notifyListeners();
+            await openExternalApp();
             return;
+          } finally {
+            _isLoadingAudio = false;
+            notifyListeners();
           }
         }
 
         _isLoadingAudio = false;
+        notifyListeners();
       }
 
       if (_resolvedStreamUrl != null && _player != null) {
@@ -742,7 +717,18 @@ class KaraokeAudioController extends ChangeNotifier {
         } catch (e) {
           debugPrint('Erro ao reproduzir stream do YouTube: $e');
           _resolvedStreamUrl = null;
+          _isPlaying = false;
+          _isLoadingAudio = false;
+          notifyListeners();
+          await openExternalApp();
+          return;
         }
+      } else {
+        _isLoadingAudio = false;
+        _isPlaying = false;
+        notifyListeners();
+        await openExternalApp();
+        return;
       }
     }
 

@@ -110,6 +110,7 @@ class _MainScreenState extends State<MainScreen> {
       FocusNode(debugLabel: 'MainScreenReaderFocus');
   ScrollController _scrollController = ScrollController();
   final List<ScrollController> _retiredControllers = [];
+  final List<Timer> _retireTimers = [];
   final FocusNode _sliderFocusNode =
       FocusNode(canRequestFocus: false, skipTraversal: true);
   Timer? _scrollTimer;
@@ -201,6 +202,10 @@ class _MainScreenState extends State<MainScreen> {
     _scrollTimer?.cancel();
     _bubbleTimer?.cancel();
     _sidebarSongListController.dispose();
+    for (final t in _retireTimers) {
+      t.cancel();
+    }
+    _retireTimers.clear();
     for (final c in _retiredControllers) {
       c.dispose();
     }
@@ -286,11 +291,14 @@ class _MainScreenState extends State<MainScreen> {
       final oldController = _scrollController;
       _retiredControllers.add(oldController);
       _scrollController = ScrollController();
-      Future.delayed(const Duration(milliseconds: 350), () {
+      Timer? retireTimer;
+      retireTimer = Timer(const Duration(milliseconds: 350), () {
+        _retireTimers.remove(retireTimer);
         if (_retiredControllers.remove(oldController)) {
           oldController.dispose();
         }
       });
+      _retireTimers.add(retireTimer);
     }
 
     setState(() {
@@ -314,7 +322,7 @@ class _MainScreenState extends State<MainScreen> {
 
   Future<void> _editCurrentSong() async {
     if (_currentSong == null) return;
-    await Navigator.push(
+    final savedSong = await Navigator.push<Song>(
       context,
       MaterialPageRoute(
         builder: (_) => SongEditScreen(
@@ -324,12 +332,15 @@ class _MainScreenState extends State<MainScreen> {
         ),
       ),
     );
-    final fresh =
-        widget.repository.allSongs.where((s) => s.id == _currentSong!.id);
-    if (fresh.isNotEmpty && mounted) {
-      final updated = fresh.first;
-      setState(() => _currentSong = updated);
-      _initKaraokeController(updated);
+    final targetId = savedSong?.id ?? _currentSong?.id;
+    if (targetId != null && mounted) {
+      final fresh =
+          widget.repository.allSongs.where((s) => s.id == targetId);
+      if (fresh.isNotEmpty) {
+        final updated = fresh.first;
+        setState(() => _currentSong = updated);
+        _initKaraokeController(updated);
+      }
     }
   }
 
@@ -996,7 +1007,7 @@ class _MainScreenState extends State<MainScreen> {
 
   // --- Ações de Criação e Setlists ---
   Future<void> _createManualSong() async {
-    await Navigator.push(
+    final created = await Navigator.push<Song>(
       context,
       MaterialPageRoute(
         builder: (_) => SongEditScreen(
@@ -1005,6 +1016,16 @@ class _MainScreenState extends State<MainScreen> {
         ),
       ),
     );
+    if (created != null && mounted) {
+      final fresh =
+          widget.repository.allSongs.where((s) => s.id == created.id);
+      if (fresh.isNotEmpty) {
+        final updated = fresh.first;
+        setState(() => _currentSong = updated);
+        _initKaraokeController(updated);
+        return;
+      }
+    }
     _ensureFirstSongSelected();
   }
 
@@ -2361,16 +2382,41 @@ class _MainScreenState extends State<MainScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            songNav,
-                            buildAutoScroll(showSlider: false),
+                            Flexible(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerLeft,
+                                child: songNav,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerRight,
+                                child: buildAutoScroll(showSlider: false),
+                              ),
+                            ),
                           ],
                         ),
                         const SizedBox(height: 8),
                         Row(
                           children: [
-                            Expanded(child: buildToneControl(isExpanded: true)),
-                            const SizedBox(width: 10),
-                            Expanded(child: buildFontControl(isExpanded: true)),
+                            Expanded(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.center,
+                                child: buildToneControl(isExpanded: true),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.center,
+                                child: buildFontControl(isExpanded: true),
+                              ),
+                            ),
                           ],
                         ),
                       ],
@@ -4196,7 +4242,7 @@ class _MainScreenState extends State<MainScreen> {
                                       } else if (val == 'add_to_list') {
                                         _showAddToSetlistDialog(song);
                                       } else if (val == 'edit') {
-                                        await Navigator.push(
+                                        final savedSong = await Navigator.push<Song>(
                                           context,
                                           MaterialPageRoute(
                                             builder: (_) => SongEditScreen(
@@ -4206,6 +4252,14 @@ class _MainScreenState extends State<MainScreen> {
                                             ),
                                           ),
                                         );
+                                        final targetId = savedSong?.id ?? song.id;
+                                        final fresh = widget.repository.allSongs
+                                            .where((s) => s.id == targetId);
+                                        if (fresh.isNotEmpty && mounted) {
+                                          final updated = fresh.first;
+                                          setState(() => _currentSong = updated);
+                                          _initKaraokeController(updated);
+                                        }
                                       } else if (val == 'delete') {
                                         final confirm = await _confirmDeletion(
                                           title: 'Excluir Cifra',

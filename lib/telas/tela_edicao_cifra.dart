@@ -15,7 +15,6 @@ import '../servicos/transpositor_acordes.dart';
 import '../servicos/servico_importacao_cifra.dart';
 import '../componentes/dialogo_importar_link.dart';
 import '../componentes/estilo_app.dart';
-import '../servicos/recarregador_pagina.dart';
 
 class SongEditScreen extends StatefulWidget {
   const SongEditScreen({
@@ -40,6 +39,9 @@ class _SongEditScreenState extends State<SongEditScreen> {
   late final TextEditingController _originalKey;
   late final TextEditingController _audioUrl;
   late final TextEditingController _audioDuration;
+  late final FocusNode _titleFocusNode;
+  late final FocusNode _artistFocusNode;
+  late final FocusNode _keyFocusNode;
   late final FocusNode _contentFocusNode;
   late final FocusNode _audioFocusNode;
   final GlobalKey _audioKey = GlobalKey();
@@ -88,6 +90,9 @@ class _SongEditScreenState extends State<SongEditScreen> {
           ? Song.formatDuration(widget.song!.audioDurationSeconds)
           : '',
     );
+    _titleFocusNode = FocusNode();
+    _artistFocusNode = FocusNode();
+    _keyFocusNode = FocusNode();
     _contentFocusNode = FocusNode();
     _audioFocusNode = FocusNode();
     _isFavorite = widget.song?.isFavorite ?? false;
@@ -109,6 +114,9 @@ class _SongEditScreenState extends State<SongEditScreen> {
     _originalKey.dispose();
     _audioUrl.dispose();
     _audioDuration.dispose();
+    _titleFocusNode.dispose();
+    _artistFocusNode.dispose();
+    _keyFocusNode.dispose();
     _contentFocusNode.dispose();
     _audioFocusNode.dispose();
     super.dispose();
@@ -382,9 +390,6 @@ class _SongEditScreenState extends State<SongEditScreen> {
 
     if (mounted) {
       Navigator.of(context).popUntil((route) => route.isFirst);
-      if (kIsWeb) {
-        reloadWebPage();
-      }
     }
   }
 
@@ -437,9 +442,6 @@ class _SongEditScreenState extends State<SongEditScreen> {
       ),
     );
     Navigator.pop(context, song);
-    if (kIsWeb) {
-      reloadWebPage();
-    }
   }
 
   @override
@@ -584,6 +586,7 @@ class _SongEditScreenState extends State<SongEditScreen> {
                       audioButton,
                       const SizedBox(width: 8),
                       BotaoGradiente(
+                        key: const ValueKey('save_song_button'),
                         onPressed: _save,
                         icon: Icons.check_circle_rounded,
                         iconSize: isCompactScreen ? 16 : 18,
@@ -681,6 +684,7 @@ class _SongEditScreenState extends State<SongEditScreen> {
                   ],
                   SizedBox(width: isCompactScreen ? 4 : 8),
                   BotaoGradiente(
+                    key: const ValueKey('save_new_song_button'),
                     onPressed: _save,
                     icon: Icons.check_circle_rounded,
                     iconSize: isCompactScreen ? 16 : 18,
@@ -697,38 +701,17 @@ class _SongEditScreenState extends State<SongEditScreen> {
           ),
         ],
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final isScrollable = constraints.maxHeight < 620;
-          final contentPadding = EdgeInsets.all(isCompactScreen ? 10 : 16);
-
-          if (isScrollable) {
-            return SingleChildScrollView(
-              padding: contentPadding,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildMetadataCard(cardBg, borderColor, isCompactScreen, inputFill, isDark),
-                  const SizedBox(height: 10),
-                  _buildEditorCard(cardBg, borderColor, inputFill, isDark, lineCount, editorBg, expands: false),
-                ],
-              ),
-            );
-          }
-
-          return Padding(
-            padding: contentPadding,
-            child: Column(
-              children: [
-                _buildMetadataCard(cardBg, borderColor, isCompactScreen, inputFill, isDark),
-                const SizedBox(height: 10),
-                Expanded(
-                  child: _buildEditorCard(cardBg, borderColor, inputFill, isDark, lineCount, editorBg, expands: true),
-                ),
-              ],
-            ),
-          );
-        },
+      body: SingleChildScrollView(
+        padding: EdgeInsets.all(isCompactScreen ? 10 : 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildMetadataCard(cardBg, borderColor, isCompactScreen, inputFill, isDark),
+            const SizedBox(height: 10),
+            _buildEditorCard(cardBg, borderColor, inputFill, isDark, lineCount, editorBg),
+            const SizedBox(height: 70),
+          ],
+        ),
       ),
       // Barra de Ferramentas Flutuante na parte inferior acima do teclado
       bottomNavigationBar: _showChordBar
@@ -861,18 +844,20 @@ class _SongEditScreenState extends State<SongEditScreen> {
     Color inputFill,
     bool isDark,
     int lineCount,
-    Color editorBg, {
-    required bool expands,
-  }) {
+    Color editorBg,
+  ) {
     final textFieldWidget = Container(
       color: editorBg,
       child: TextField(
+        key: const ValueKey('edit_song_content_field'),
         controller: _content,
         focusNode: _contentFocusNode,
-        expands: expands,
-        maxLines: expands ? null : null,
-        minLines: expands ? null : 10,
-        onChanged: (_) => setState(() {}),
+        maxLines: null,
+        minLines: 16,
+        onChanged: (_) {
+          final newCount = _content.text.isEmpty ? 0 : _content.text.split('\n').length;
+          if (newCount != lineCount) setState(() {});
+        },
         textAlignVertical: TextAlignVertical.top,
         style: TextStyle(
           fontFamily: 'monospace',
@@ -908,7 +893,7 @@ class _SongEditScreenState extends State<SongEditScreen> {
         ],
       ),
       child: Column(
-        mainAxisSize: expands ? MainAxisSize.max : MainAxisSize.min,
+        mainAxisSize: MainAxisSize.min,
         children: [
           // Barra Superior do Editor: Tags rápidas, contador de linhas, alternar acordes e limpar
           Container(
@@ -1034,13 +1019,7 @@ class _SongEditScreenState extends State<SongEditScreen> {
           ),
 
           // Editor Text Field Area
-          if (expands)
-            Expanded(child: textFieldWidget)
-          else
-            SizedBox(
-              height: 250,
-              child: textFieldWidget,
-            ),
+          textFieldWidget,
         ],
       ),
     );
@@ -1596,7 +1575,9 @@ class _SongEditScreenState extends State<SongEditScreen> {
 
   Widget _buildTitleField(Color fill, bool isDark) {
     return TextField(
+      key: const ValueKey('edit_song_title_field'),
       controller: _title,
+      focusNode: _titleFocusNode,
       style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
       decoration: InputDecoration(
         labelText: 'Título da Música *',
@@ -1622,7 +1603,9 @@ class _SongEditScreenState extends State<SongEditScreen> {
 
   Widget _buildArtistField(Color fill, bool isDark) {
     return TextField(
+      key: const ValueKey('edit_song_artist_field'),
       controller: _artist,
+      focusNode: _artistFocusNode,
       style: const TextStyle(fontSize: 13.5),
       decoration: InputDecoration(
         labelText: 'Artista / Cantor(a)',
@@ -1648,7 +1631,9 @@ class _SongEditScreenState extends State<SongEditScreen> {
 
   Widget _buildKeyField(Color fill, bool isDark, {bool compact = false}) {
     return TextField(
+      key: const ValueKey('edit_song_key_field'),
       controller: _originalKey,
+      focusNode: _keyFocusNode,
       style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold),
       decoration: InputDecoration(
         labelText: compact ? 'Tom' : 'Tom Original',

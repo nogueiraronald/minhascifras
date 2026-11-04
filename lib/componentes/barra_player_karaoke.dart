@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../modelos/musica.dart';
 import '../servicos/controlador_audio_karaoke.dart';
@@ -351,39 +352,55 @@ class BarraPlayerKaraoke extends StatelessWidget {
         const SizedBox(width: 2),
 
         // Botão Central de Play / Pause
-        InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: controller.togglePlayPause,
-          child: Container(
-            width: 30,
-            height: 30,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: AppCores.gradienteLogo,
-              boxShadow: [
-                BoxShadow(
-                  color: AppCores.roxo.withValues(alpha: 0.30),
-                  blurRadius: 6,
-                  offset: const Offset(0, 1),
-                ),
-              ],
-            ),
-            child: controller.isLoadingAudio
-                ? const Center(
-                    child: SizedBox(
-                      width: 13,
-                      height: 13,
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 1.8,
-                      ),
-                    ),
-                  )
-                : Icon(
-                    controller.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                    color: Colors.white,
-                    size: 18,
+        Tooltip(
+          message: (kIsWeb && controller.song.audioType == 'youtube')
+              ? 'Abrir no YouTube'
+              : (controller.isPlaying ? 'Pausar' : 'Reproduzir'),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () {
+              if (kIsWeb && controller.song.audioType == 'youtube') {
+                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Abrindo vídeo no YouTube...'),
+                    duration: Duration(seconds: 2),
                   ),
+                );
+              }
+              controller.togglePlayPause();
+            },
+            child: Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: AppCores.gradienteLogo,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppCores.roxo.withValues(alpha: 0.30),
+                    blurRadius: 6,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+              ),
+              child: controller.isLoadingAudio
+                  ? const Center(
+                      child: SizedBox(
+                        width: 13,
+                        height: 13,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 1.8,
+                        ),
+                      ),
+                    )
+                  : Icon(
+                      controller.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+            ),
           ),
         ),
         const SizedBox(width: 2),
