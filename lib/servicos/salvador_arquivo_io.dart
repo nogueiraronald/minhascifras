@@ -2,12 +2,19 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 
-Future<bool> saveFileToDevice(String fileName, Uint8List bytes) async {
+Future<bool> saveFileToDevice(
+  String fileName,
+  Uint8List bytes, {
+  String? mimeType,
+}) async {
+  final ext =
+      fileName.contains('.') ? fileName.split('.').last.toLowerCase() : '';
+  final isPdf = ext == 'pdf';
   final path = await FilePicker.platform.saveFile(
-    dialogTitle: 'Salvar ZIP',
+    dialogTitle: isPdf ? 'Salvar Cartão em PDF' : 'Salvar Arquivo',
     fileName: fileName,
-    type: FileType.custom,
-    allowedExtensions: ['zip'],
+    type: ext.isNotEmpty ? FileType.custom : FileType.any,
+    allowedExtensions: ext.isNotEmpty ? [ext] : null,
     bytes: bytes,
   );
   if (path == null) return false;
@@ -19,3 +26,4 @@ Future<bool> saveFileToDevice(String fileName, Uint8List bytes) async {
   }
   return true;
 }
+

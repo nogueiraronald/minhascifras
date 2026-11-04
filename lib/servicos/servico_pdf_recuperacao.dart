@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/material.dart'
     show BuildContext, Colors, ScaffoldMessenger, SnackBar, Text;
 import 'package:flutter/services.dart' show rootBundle;
@@ -6,6 +8,8 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../dados/controlador_conta.dart';
+import 'salvador_arquivo.dart';
+
 
 /// Serviço responsável por gerar e baixar o Cartão Oficial de Recuperação em PDF
 /// com design premium, logo oficial em alta resolução, QR Code vetorial e dados
@@ -495,13 +499,55 @@ class RecoveryPdfService {
       );
 
       final pdfBytes = await doc.save();
+      final fileName = 'minhas-cifras-recuperacao-$code.pdf';
 
-      await Printing.sharePdf(
-        bytes: pdfBytes,
-        filename: 'minhas-cifras-recuperacao-$code.pdf',
-      );
+      bool saved = false;
+      final isDesktopOrWeb = kIsWeb ||
+          defaultTargetPlatform == TargetPlatform.macOS ||
+          defaultTargetPlatform == TargetPlatform.windows ||
+          defaultTargetPlatform == TargetPlatform.linux;
 
-      if (context.mounted) {
+      if (isDesktopOrWeb) {
+        try {
+          saved = await saveFileToDevice(
+            fileName,
+            pdfBytes,
+            mimeType: 'application/pdf',
+          );
+        } catch (_) {
+          saved = false;
+        }
+
+        // Fallback seguro em Desktop/Web: preview nativo de impressão caso não tenha salvo
+        if (!saved) {
+          try {
+            await Printing.layoutPdf(
+              onLayout: (format) async => pdfBytes,
+              name: fileName,
+            );
+            saved = true;
+          } catch (_) {}
+        }
+      } else {
+        // Plataformas Mobile (iOS e Android)
+        try {
+          await Printing.sharePdf(
+            bytes: pdfBytes,
+            filename: fileName,
+          );
+          saved = true;
+        } catch (_) {
+          try {
+            await Printing.layoutPdf(
+              onLayout: (format) async => pdfBytes,
+              name: fileName,
+            );
+            saved = true;
+          } catch (_) {}
+        }
+      }
+
+      if (context.mounted && saved) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Cartão de recuperação "$code" gerado com sucesso!'),
