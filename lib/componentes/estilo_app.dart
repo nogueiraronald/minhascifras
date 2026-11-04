@@ -49,10 +49,12 @@ class CartaoDialogoModerno extends StatelessWidget {
     super.key,
     required this.child,
     this.width = 460,
+    this.margin,
   });
 
   final Widget child;
   final double width;
+  final EdgeInsetsGeometry? margin;
 
   @override
   Widget build(BuildContext context) {
@@ -70,7 +72,7 @@ class CartaoDialogoModerno extends StatelessWidget {
         color: Colors.transparent,
         child: Container(
           width: effectiveWidth,
-          margin: EdgeInsets.symmetric(horizontal: horizontalMargin, vertical: 20),
+          margin: margin ?? EdgeInsets.symmetric(horizontal: horizontalMargin, vertical: 20),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(isSmallScreen ? 20 : 24),
             boxShadow: [
@@ -115,14 +117,16 @@ class CartaoDialogoModerno extends StatelessWidget {
                         gradient: AppCores.gradienteLogo,
                       ),
                     ),
-                    Padding(
-                      padding: EdgeInsets.fromLTRB(
-                        horizontalPadding,
-                        verticalPadding,
-                        horizontalPadding,
-                        verticalPadding,
+                    Flexible(
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(
+                          horizontalPadding,
+                          verticalPadding,
+                          horizontalPadding,
+                          verticalPadding,
+                        ),
+                        child: child,
                       ),
-                      child: child,
                     ),
                   ],
                 ),

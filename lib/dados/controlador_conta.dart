@@ -15,6 +15,43 @@ class AccountController extends ChangeNotifier {
   String? syncCode;
   String? error;
 
+  /// Retorna a URL completa para pareamento instantâneo via QR Code
+  String get syncUrl {
+    final code = syncCode ?? '';
+    if (kIsWeb) {
+      final origin = Uri.base.origin;
+      var path = Uri.base.path;
+      if (path.endsWith('index.html')) {
+        path = path.substring(0, path.length - 'index.html'.length);
+      }
+      if (!path.endsWith('/')) {
+        path = '$path/';
+      }
+      return '$origin$path?sync=$code';
+    }
+    return 'https://nogueiraronald.github.io/minhascifras-web/?sync=$code';
+  }
+
+  /// Extrai o identificador limpo a partir de texto digitado, copiado ou link completo com ?sync=...
+  static String extractCode(String input) {
+    var text = input.trim();
+    if (text.isEmpty) return '';
+
+    if (text.contains('sync=')) {
+      final uri = Uri.tryParse(text);
+      if (uri != null && uri.queryParameters.containsKey('sync')) {
+        final val = uri.queryParameters['sync']?.trim().toUpperCase();
+        if (val != null && val.isNotEmpty) return val;
+      }
+      final match = RegExp(r'[?&]sync=([a-zA-Z0-9_-]+)').firstMatch(text);
+      if (match != null && match.group(1) != null) {
+        return match.group(1)!.toUpperCase();
+      }
+    }
+
+    return text.toUpperCase();
+  }
+
   /// Mantido para compatibilidade com a UI
   String? get email => syncCode != null ? 'Código: $syncCode' : null;
   String? get spreadsheetId => syncCode;
@@ -26,9 +63,25 @@ class AccountController extends ChangeNotifier {
     return controller;
   }
 
-  /// Carrega o código existente ou gera automaticamente um código único na primeira abertura
+  /// Carrega o código existente, detecta link via QR Code (?sync=...) ou gera um código único na primeira abertura
   Future<void> restore() async {
     try {
+      // 1. Se foi aberto via leitura de QR Code (?sync=MC-XXXXXX)
+      if (kIsWeb && Uri.base.queryParameters.containsKey('sync')) {
+        final rawSync = Uri.base.queryParameters['sync'];
+        if (rawSync != null) {
+          final querySync = extractCode(rawSync);
+          if (querySync.isNotEmpty) {
+            await _prefs.setString(_kSyncCode, querySync);
+            syncCode = querySync;
+            status = AccountStatus.ready;
+            error = null;
+            notifyListeners();
+            return;
+          }
+        }
+      }
+
       var saved = _prefs.getString(_kSyncCode);
       if (saved == null || saved.trim().isEmpty) {
         saved = _generateCode();
@@ -46,8 +99,10 @@ class AccountController extends ChangeNotifier {
 
   /// Conecta a um repertório existente através de um código fornecido pelo usuário
   Future<void> connectToSyncCode(String newCode) async {
-    final clean = newCode.trim().toUpperCase();
-    if (clean.isEmpty) return;
+    final clean = extractCode(newCode);
+    if (clean.isEmpty) {
+      throw StateError('Por favor, informe ou cole um código válido.');
+    }
 
     _update(AccountStatus.working);
     try {
