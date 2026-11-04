@@ -1,5 +1,4 @@
 import 'dart:ui';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../modelos/musica.dart';
 import '../servicos/controlador_audio_karaoke.dart';
@@ -13,10 +12,14 @@ class BarraPlayerKaraoke extends StatelessWidget {
     super.key,
     required this.controller,
     this.onClose,
+    this.onToggleVideo,
+    this.isVideoVisible = false,
   });
 
   final KaraokeAudioController controller;
   final VoidCallback? onClose;
+  final VoidCallback? onToggleVideo;
+  final bool isVideoVisible;
 
   @override
   Widget build(BuildContext context) {
@@ -351,25 +354,12 @@ class BarraPlayerKaraoke extends StatelessWidget {
         ),
         const SizedBox(width: 2),
 
-        // Botão Central de Play / Pause
+        // Botão Central de Play / Pause do Karaokê
         Tooltip(
-          message: (kIsWeb && controller.song.audioType == 'youtube')
-              ? 'Abrir no YouTube'
-              : (controller.isPlaying ? 'Pausar' : 'Reproduzir'),
+          message: controller.isPlaying ? 'Pausar Karaokê' : 'Iniciar Karaokê',
           child: InkWell(
             borderRadius: BorderRadius.circular(16),
-            onTap: () {
-              if (kIsWeb && controller.song.audioType == 'youtube') {
-                ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Abrindo vídeo no YouTube...'),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-              }
-              controller.togglePlayPause();
-            },
+            onTap: controller.togglePlayPause,
             child: Container(
               width: 30,
               height: 30,
@@ -404,6 +394,22 @@ class BarraPlayerKaraoke extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 2),
+
+        // Botão de Vídeo Integrado do YouTube
+        if (controller.isYoutube && onToggleVideo != null) ...[
+          IconButton(
+            icon: Icon(
+              isVideoVisible ? Icons.smart_display_rounded : Icons.smart_display_outlined,
+              size: 18,
+              color: isVideoVisible ? AppCores.rosa : serviceColor,
+            ),
+            tooltip: isVideoVisible ? 'Ocultar clipe do YouTube' : 'Exibir clipe integrado',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+            onPressed: onToggleVideo,
+          ),
+          const SizedBox(width: 2),
+        ],
 
         // Avançar 10s
         IconButton(

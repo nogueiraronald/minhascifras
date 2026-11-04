@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../componentes/barra_player_karaoke.dart';
 import '../componentes/dialogo_acordes.dart';
+import '../componentes/player_youtube_embutido.dart';
 import '../componentes/visualizador_cifra.dart';
 import '../dados/biblioteca_acordes.dart';
 import '../dados/repositorio_musicas.dart';
@@ -48,6 +49,7 @@ class _SongReaderScreenState extends State<SongReaderScreen> {
 
   KaraokeAudioController? _karaokeController;
   bool _showKaraokePlayer = true;
+  bool _showYoutubeVideo = false;
 
   Song get _song => _songs[_index];
 
@@ -59,6 +61,7 @@ class _SongReaderScreenState extends State<SongReaderScreen> {
 
   void _initKaraoke(Song song) {
     _karaokeController?.dispose();
+    _showYoutubeVideo = false;
     if (song.hasAudio) {
       _karaokeController = KaraokeAudioController(
         song: song,
@@ -229,6 +232,20 @@ class _SongReaderScreenState extends State<SongReaderScreen> {
               child: BarraPlayerKaraoke(
                 controller: _karaokeController!,
                 onClose: () => setState(() => _showKaraokePlayer = false),
+                onToggleVideo: () => setState(() => _showYoutubeVideo = !_showYoutubeVideo),
+                isVideoVisible: _showYoutubeVideo,
+              ),
+            ),
+          if (_showYoutubeVideo &&
+              _song.hasAudio &&
+              _song.audioType == 'youtube' &&
+              Song.extractYoutubeVideoId(_song.audioUrl!) != null)
+            Positioned(
+              right: 12,
+              bottom: 56,
+              child: PlayerYoutubeEmbutido(
+                videoId: Song.extractYoutubeVideoId(_song.audioUrl!)!,
+                onClose: () => setState(() => _showYoutubeVideo = false),
               ),
             ),
         ],

@@ -346,27 +346,45 @@ void main() {
     });
   });
 
-  group('Player de YouTube sem carregamento infinito', () {
-    test('Controlador com link de YouTube não fica com isLoadingAudio travado', () async {
+  group('Player de YouTube e Função de Karaokê Ativa no App', () {
+    testWidgets('Controlador com link de YouTube executa a função de Karaokê dentro do app sem abrir app externo', (tester) async {
       final youtubeSong = Song(
         id: 'yt-1',
-        title: 'Música YouTube',
+        title: 'Música YouTube Karaokê',
         artist: 'Artista YouTube',
-        content: 'C   G\nLetra teste',
+        content: 'C   G\nLetra teste sincronizada',
         audioUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        audioDurationSeconds: 180,
       );
 
+      final scrollController = ScrollController();
       final controller = KaraokeAudioController(
         song: youtubeSong,
-        scrollController: ScrollController(),
+        scrollController: scrollController,
         enableNativeAudio: false,
       );
 
-      // play() não deve travar o estado em isLoadingAudio
+      expect(controller.isPlaying, isFalse);
+      expect(controller.currentPosition, Duration.zero);
+
+      // Ao dar play, o Karaokê inicia imediatamente dentro do app
       await controller.play();
 
+      expect(controller.isPlaying, isTrue);
       expect(controller.isLoadingAudio, isFalse);
+
+      // Simula passagem de tempo no clock do Karaokê
+      await tester.pump(const Duration(milliseconds: 550));
+
+      expect(controller.isPlaying, isTrue);
+      expect(controller.currentPosition.inMilliseconds, greaterThan(0));
+
+      // Pausa o Karaokê
+      await controller.pause();
+      expect(controller.isPlaying, isFalse);
+
       controller.dispose();
+      scrollController.dispose();
     });
   });
 }

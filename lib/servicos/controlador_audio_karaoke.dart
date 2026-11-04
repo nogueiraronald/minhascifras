@@ -70,6 +70,7 @@ class KaraokeAudioController extends ChangeNotifier {
   StreamSubscription? _durSub;
   StreamSubscription? _stateSub;
   StreamSubscription? _completeSub;
+  Timer? _karaokeTimer;
 
   bool _isDisposed = false;
   bool _isPlaying = false;
@@ -117,8 +118,6 @@ class KaraokeAudioController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void>? _preloadFuture;
-
   void _init() {
     // Configura duração inicial se definida no modelo
     if (song.audioDurationSeconds != null && song.audioDurationSeconds! > 0) {
@@ -132,7 +131,7 @@ class KaraokeAudioController extends ChangeNotifier {
     if (enableNativeAudio) {
       _initNativePlayer();
       if (song.hasAudio && isYoutube && !kIsWeb) {
-        _preloadFuture = _preloadCaptionsAndAudio();
+        _preloadCaptionsAndAudio();
       }
     }
   }
@@ -652,110 +651,108 @@ class KaraokeAudioController extends ChangeNotifier {
     }
   }
 
+  void _startKaraokeClock() {
+    _karaokeTimer?.cancel();
+    _karaokeTimer = Timer.periodic(const Duration(milliseconds: 250), (timer) {
+      if (!_isPlaying || _isDisposed) {
+        timer.cancel();
+        return;
+      }
+
+      // Se estiver tocando arquivo MP3 pelo AudioPlayer nativo, ele comanda a posição
+      if (_player != null && song.audioType == 'mp3' && _player!.state == PlayerState.playing) {
+        return;
+      }
+
+      final nextMs = _currentPosition.inMilliseconds + 250;
+      if (nextMs >= _totalDuration.inMilliseconds) {
+        _currentPosition = _totalDuration;
+        _isPlaying = false;
+        timer.cancel();
+        _updateDynamicMatching(_currentPosition);
+        _syncScroll();
+        notifyListeners();
+        return;
+      }
+
+      _currentPosition = Duration(milliseconds: nextMs);
+      _updateDynamicMatching(_currentPosition);
+      _syncScroll();
+      notifyListeners();
+    });
+  }
+
   Future<void> play() async {
     if (!song.hasAudio) return;
 
     final url = song.audioUrl!.trim();
+    _errorMessage = null;
+    _isLoadingAudio = false;
 
-    // 1. YouTube: resolve áudio real em MP4/AAC e obtém legendas temporizadas
+    // 1. YouTube: Executa o Karaokê sincronizado imediatamente DENTRO do aplicativo
     if (isYoutube) {
-      if (kIsWeb) {
-        // No navegador web (PWA), CORS impede a extração direta do fluxo de áudio do YouTube.
-        // O app abre diretamente no YouTube externo oficial e não trava o loading.
-        _isLoadingAudio = false;
-        _isPlaying = false;
-        notifyListeners();
-        await openExternalApp();
-        return;
+      _isPlaying = true;
+      _startKaraokeClock();
+      notifyListeners();
+
+      // No ambiente Nativo (macOS, iOS, Android), tenta em segundo plano extrair o stream
+      if (!kIsWeb && enableNativeAudio && _player != null) {
+        _tryPlayNativeYoutubeStream(url);
       }
-
-      if (_resolvedStreamUrl == null) {
-        _isLoadingAudio = true;
-        _errorMessage = null;
-        notifyListeners();
-
-        // Se o pré-carregamento estiver em andamento, aguarda com timeout
-        if (_preloadFuture != null) {
-          try {
-            await _preloadFuture!.timeout(const Duration(seconds: 4));
-          } catch (_) {}
-        }
-
-        // Se ainda não tiver resolvido, faz a extração direta com timeout de 5s
-        if (_resolvedStreamUrl == null) {
-          try {
-            await _extractYoutubeStream(url).timeout(const Duration(seconds: 5));
-          } catch (e) {
-            debugPrint('Erro ao extrair áudio do YouTube: $e');
-            _isLoadingAudio = false;
-            _errorMessage = 'Não foi possível carregar áudio do YouTube.';
-            _isPlaying = false;
-            notifyListeners();
-            await openExternalApp();
-            return;
-          } finally {
-            _isLoadingAudio = false;
-            notifyListeners();
-          }
-        }
-
-        _isLoadingAudio = false;
-        notifyListeners();
-      }
-
-      if (_resolvedStreamUrl != null && _player != null) {
-        try {
-          await _player!.setVolume(_isMuted ? 0.0 : _volume);
-          await _player!.play(UrlSource(_resolvedStreamUrl!));
-          if (_currentPosition > Duration.zero) {
-            await _player!.seek(_currentPosition);
-          }
-          _isPlaying = true;
-          _isLoadingAudio = false;
-          notifyListeners();
-          return;
-        } catch (e) {
-          debugPrint('Erro ao reproduzir stream do YouTube: $e');
-          _resolvedStreamUrl = null;
-          _isPlaying = false;
-          _isLoadingAudio = false;
-          notifyListeners();
-          await openExternalApp();
-          return;
-        }
-      } else {
-        _isLoadingAudio = false;
-        _isPlaying = false;
-        notifyListeners();
-        await openExternalApp();
-        return;
-      }
+      return;
     }
 
     // 2. MP3 / Arquivo Local / URL direta de áudio
     if (song.audioType == 'mp3' && _player != null) {
-      final uri = Uri.tryParse(url);
-      if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
-        await _player!.play(UrlSource(url));
-      } else {
-        final cleanPath = url.replaceFirst(RegExp(r'^file://'), '');
-        final file = File(cleanPath);
-        if (await file.exists()) {
-          await _player!.play(DeviceFileSource(cleanPath));
+      try {
+        final uri = Uri.tryParse(url);
+        if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
+          await _player!.play(UrlSource(url));
         } else {
-          await _player!.play(DeviceFileSource(url));
+          final cleanPath = url.replaceFirst(RegExp(r'^file://'), '');
+          final file = File(cleanPath);
+          if (await file.exists()) {
+            await _player!.play(DeviceFileSource(cleanPath));
+          } else {
+            await _player!.play(DeviceFileSource(url));
+          }
         }
+        if (_currentPosition > Duration.zero) {
+          await _player!.seek(_currentPosition);
+        }
+        _isPlaying = true;
+        _startKaraokeClock();
+        notifyListeners();
+        return;
+      } catch (e) {
+        debugPrint('Erro ao reproduzir stream MP3: $e');
+        _isPlaying = true;
+        _startKaraokeClock();
+        notifyListeners();
+        return;
       }
-      if (_currentPosition > Duration.zero) {
-        await _player!.seek(_currentPosition);
-      }
-      _isPlaying = true;
-      notifyListeners();
-      return;
+    }
+  }
+
+  Future<void> _tryPlayNativeYoutubeStream(String url) async {
+    if (_resolvedStreamUrl == null) {
+      try {
+        await _extractYoutubeStream(url).timeout(const Duration(seconds: 4));
+      } catch (_) {}
+    }
+    if (_resolvedStreamUrl != null && _player != null && _isPlaying && !_isDisposed) {
+      try {
+        await _player!.setVolume(_isMuted ? 0.0 : _volume);
+        await _player!.play(UrlSource(_resolvedStreamUrl!));
+        if (_currentPosition > Duration.zero) {
+          await _player!.seek(_currentPosition);
+        }
+      } catch (_) {}
     }
   }
 
   Future<void> pause() async {
+    _karaokeTimer?.cancel();
     if (_player != null) {
       try {
         await _player!.pause().timeout(const Duration(milliseconds: 200), onTimeout: () {});
@@ -886,6 +883,7 @@ class KaraokeAudioController extends ChangeNotifier {
   @override
   void dispose() {
     _isDisposed = true;
+    _karaokeTimer?.cancel();
     _posSub?.cancel();
     _durSub?.cancel();
     _stateSub?.cancel();

@@ -35,6 +35,7 @@ import 'tela_edicao_cifra.dart';
 import '../componentes/estilo_app.dart';
 import '../servicos/controlador_audio_karaoke.dart';
 import '../componentes/barra_player_karaoke.dart';
+import '../componentes/player_youtube_embutido.dart';
 
 /// Modos de exibição da música: Cifra completa, Letra pura ou Partitura musical.
 enum SongDisplayMode {
@@ -121,10 +122,12 @@ class _MainScreenState extends State<MainScreen> {
   // Player de Áudio & Karaokê Sincronizado
   KaraokeAudioController? _karaokeController;
   bool _showKaraokePlayer = true;
+  bool _showYoutubeVideo = false;
 
   void _initKaraokeController(Song? song) {
     _karaokeController?.dispose();
     _karaokeController = null;
+    _showYoutubeVideo = false;
     if (song != null && song.hasAudio) {
       _karaokeController = KaraokeAudioController(
         song: song,
@@ -1962,62 +1965,82 @@ class _MainScreenState extends State<MainScreen> {
 
         // Área de Leitura Central com transição ao arrastar para os lados
         Expanded(
-          child: GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            onTap: () {
-              FocusManager.instance.primaryFocus?.unfocus();
-              _mainFocusNode.requestFocus();
-            },
-            onHorizontalDragStart: (_) {
-              _horizontalDragDistance = 0;
-            },
-            onHorizontalDragUpdate: (details) {
-              _horizontalDragDistance += details.primaryDelta ?? 0;
-            },
-            onHorizontalDragEnd: (details) {
-              final velocity = details.primaryVelocity ?? 0;
-              // Arrastou para a esquerda -> Próxima música
-              if (_horizontalDragDistance < -50 || velocity < -250) {
-                _navigateSong(1);
-              }
-              // Arrastou para a direita -> Música anterior
-              else if (_horizontalDragDistance > 50 || velocity > 250) {
-                _navigateSong(-1);
-              }
-              _horizontalDragDistance = 0;
-            },
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 250),
-              layoutBuilder: (currentChild, previousChildren) {
-                return Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    ...previousChildren,
-                    if (currentChild != null) currentChild,
-                  ],
-                );
-              },
-              transitionBuilder: (child, animation) {
-                final offset = Tween<Offset>(
-                  begin: Offset(_navDirection >= 0 ? 0.08 : -0.08, 0),
-                  end: Offset.zero,
-                ).animate(CurvedAnimation(
-                  parent: animation,
-                  curve: Curves.easeOutCubic,
-                ));
-                return FadeTransition(
-                  opacity: animation,
-                  child: SlideTransition(
-                    position: offset,
-                    child: child,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onTap: () {
+                    FocusManager.instance.primaryFocus?.unfocus();
+                    _mainFocusNode.requestFocus();
+                  },
+                  onHorizontalDragStart: (_) {
+                    _horizontalDragDistance = 0;
+                  },
+                  onHorizontalDragUpdate: (details) {
+                    _horizontalDragDistance += details.primaryDelta ?? 0;
+                  },
+                  onHorizontalDragEnd: (details) {
+                    final velocity = details.primaryVelocity ?? 0;
+                    // Arrastou para a esquerda -> Próxima música
+                    if (_horizontalDragDistance < -50 || velocity < -250) {
+                      _navigateSong(1);
+                    }
+                    // Arrastou para a direita -> Música anterior
+                    else if (_horizontalDragDistance > 50 || velocity > 250) {
+                      _navigateSong(-1);
+                    }
+                    _horizontalDragDistance = 0;
+                  },
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 250),
+                    layoutBuilder: (currentChild, previousChildren) {
+                      return Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          ...previousChildren,
+                          if (currentChild != null) currentChild,
+                        ],
+                      );
+                    },
+                    transitionBuilder: (child, animation) {
+                      final offset = Tween<Offset>(
+                        begin: Offset(_navDirection >= 0 ? 0.08 : -0.08, 0),
+                        end: Offset.zero,
+                      ).animate(CurvedAnimation(
+                        parent: animation,
+                        curve: Curves.easeOutCubic,
+                      ));
+                      return FadeTransition(
+                        opacity: animation,
+                        child: SlideTransition(
+                          position: offset,
+                          child: child,
+                        ),
+                      );
+                    },
+                    child: KeyedSubtree(
+                      key: ValueKey('${_currentSong!.id}_${_displayMode.name}'),
+                      child: _buildSongView(),
+                    ),
                   ),
-                );
-              },
-              child: KeyedSubtree(
-                key: ValueKey('${_currentSong!.id}_${_displayMode.name}'),
-                child: _buildSongView(),
+                ),
               ),
-            ),
+
+              // Player de vídeo do YouTube embutido (Picture-in-Picture) integrado à cifra
+              if (_showYoutubeVideo &&
+                  _currentSong?.hasAudio == true &&
+                  _currentSong?.audioType == 'youtube' &&
+                  Song.extractYoutubeVideoId(_currentSong!.audioUrl!) != null)
+                Positioned(
+                  right: 12,
+                  bottom: 8,
+                  child: PlayerYoutubeEmbutido(
+                    videoId: Song.extractYoutubeVideoId(_currentSong!.audioUrl!)!,
+                    onClose: () => setState(() => _showYoutubeVideo = false),
+                  ),
+                ),
+            ],
           ),
         ),
 
@@ -2028,6 +2051,8 @@ class _MainScreenState extends State<MainScreen> {
           BarraPlayerKaraoke(
             controller: _karaokeController!,
             onClose: () => setState(() => _showKaraokePlayer = false),
+            onToggleVideo: () => setState(() => _showYoutubeVideo = !_showYoutubeVideo),
+            isVideoVisible: _showYoutubeVideo,
           ),
 
         // Barra inferior focada no músico (Rolagem, Tom, Fonte, Navegação)
