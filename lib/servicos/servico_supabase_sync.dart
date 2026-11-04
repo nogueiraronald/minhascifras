@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../configuracao/configuracao_app.dart';
@@ -11,12 +12,54 @@ import 'dados_nuvem.dart';
 class SupabaseSyncService {
   SupabaseSyncService();
 
-  Map<String, String> get _headers => {
+  Map<String, String> get _readHeaders => {
+        'apikey': AppConfig.supabaseAnonKey,
+        'Authorization': 'Bearer ${AppConfig.supabaseAnonKey}',
+        'Accept': 'application/json',
+      };
+
+  Map<String, String> get _writeHeaders => {
         'apikey': AppConfig.supabaseAnonKey,
         'Authorization': 'Bearer ${AppConfig.supabaseAnonKey}',
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       };
+
+  Future<http.Response> _getWithRetry(Uri uri, Map<String, String> headers) async {
+    Object? lastError;
+    for (int attempt = 1; attempt <= 3; attempt++) {
+      try {
+        final response =
+            await http.get(uri, headers: headers).timeout(const Duration(seconds: 20));
+        return response;
+      } catch (e) {
+        lastError = e;
+        if (attempt < 3) {
+          await Future.delayed(Duration(milliseconds: 300 * attempt));
+        }
+      }
+    }
+    throw lastError!;
+  }
+
+  Future<http.Response> _postWithRetry(
+      Uri uri, Map<String, String> headers, String body) async {
+    Object? lastError;
+    for (int attempt = 1; attempt <= 2; attempt++) {
+      try {
+        final response = await http
+            .post(uri, headers: headers, body: body)
+            .timeout(const Duration(seconds: 25));
+        return response;
+      } catch (e) {
+        lastError = e;
+        if (attempt < 2) {
+          await Future.delayed(const Duration(milliseconds: 500));
+        }
+      }
+    }
+    throw lastError!;
+  }
 
   /// Lê todas as músicas e setlists salvas para o código de sincronização fornecido.
   Future<CloudData> readAll(String syncCode) async {
@@ -28,14 +71,15 @@ class SupabaseSyncService {
     final uri = Uri.parse(
         '${AppConfig.supabaseUrl}/rest/v1/repertorios_sync?codigo=eq.$cleanCode&select=dados,atualizado_em');
 
-    final response = await http.get(uri, headers: _headers);
+    final response = await _getWithRetry(uri, _readHeaders);
 
     if (response.statusCode != 200) {
       throw Exception(
           'Erro ao ler do Supabase (${response.statusCode}): ${response.body}');
     }
 
-    final list = jsonDecode(utf8.decode(response.bodyBytes)) as List;
+    final rawText = kIsWeb ? response.body : utf8.decode(response.bodyBytes);
+    final list = jsonDecode(rawText) as List;
     if (list.isEmpty) {
       return const CloudData();
     }
@@ -91,10 +135,11 @@ class SupabaseSyncService {
         '${AppConfig.supabaseUrl}/rest/v1/repertorios_sync?codigo=eq.$cleanCode&select=dados');
 
     try {
-      final response = await http.get(uri, headers: _headers);
+      final response = await _getWithRetry(uri, _readHeaders);
       if (response.statusCode != 200) return null;
 
-      final list = jsonDecode(utf8.decode(response.bodyBytes)) as List;
+      final rawText = kIsWeb ? response.body : utf8.decode(response.bodyBytes);
+      final list = jsonDecode(rawText) as List;
       if (list.isEmpty) return null;
 
       final first = list.first as Map<String, dynamic>;
@@ -134,14 +179,14 @@ class SupabaseSyncService {
     };
 
     final headers = {
-      ..._headers,
+      ..._writeHeaders,
       'Prefer': 'resolution=merge-duplicates,return=minimal',
     };
 
-    final response = await http.post(
+    final response = await _postWithRetry(
       uri,
-      headers: headers,
-      body: jsonEncode(payload),
+      headers,
+      jsonEncode(payload),
     );
 
     if (response.statusCode >= 300) {

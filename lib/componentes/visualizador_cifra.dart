@@ -82,10 +82,11 @@ class _ChordSheetViewState extends State<ChordSheetView> {
     final clean = ChordTransposer.cleanText(widget.content);
     final lines = clean.replaceAll('\r\n', '\n').split('\n');
 
-    // Mapeia índices exclusivos das linhas de acordes
+    // Mapeia índices exclusivos das linhas de acordes e marcadores estruturais ([Refrão], (REFRÃO), etc.)
     final chordIndices = <int>[];
     for (int i = 0; i < lines.length; i++) {
-      if (ChordTransposer.isChordLine(lines[i])) {
+      final trimmed = lines[i].trim();
+      if (ChordTransposer.isChordLine(lines[i]) || ChordTransposer.isMarker(trimmed) || RegExp(r'^\[.*\]$').hasMatch(trimmed)) {
         chordIndices.add(i);
       }
     }
@@ -128,20 +129,21 @@ class _ChordSheetViewState extends State<ChordSheetView> {
       itemCount: lines.length,
       itemBuilder: (_, i) {
         final line = lines[i];
-        final isBlank = line.trim().isEmpty;
+        final trimmed = line.trim();
+        final isBlank = trimmed.isEmpty;
         final isChord = ChordTransposer.isChordLine(line);
-        // No modo cifra, APENAS linhas de acordes podem ser ressaltadas!
-        final isActive = isChord && resolvedActiveChordIndex != null && i == resolvedActiveChordIndex;
+        final isMarker = ChordTransposer.isMarker(trimmed) || RegExp(r'^\[.*\]$').hasMatch(trimmed);
+        // No modo cifra, linhas de acordes e marcadores estruturais (ex: (REFRÃO)) podem ser ressaltados!
+        final isActive = (isChord || isMarker) && resolvedActiveChordIndex != null && i == resolvedActiveChordIndex;
 
         Widget lineWidget;
 
         if (isBlank) {
           lineWidget = Text(' ', style: base);
         } else if (!isChord) {
-          final isMarker = ChordTransposer.isMarker(line) || RegExp(r'^\[.*\]$').hasMatch(line.trim());
           final style = isMarker
               ? base.copyWith(
-                  color: scheme.primary,
+                  color: isActive ? AppCores.rosa : scheme.primary,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 0.3,
                 )

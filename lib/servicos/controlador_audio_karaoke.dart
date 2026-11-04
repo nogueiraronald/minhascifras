@@ -44,6 +44,23 @@ class _KaraokeSection {
   });
 }
 
+/// Item da linha do tempo estimada contínua
+class _EstimatedTimelineItem {
+  final int? chordIdx;
+  final int? lyricIdx;
+  final String text;
+  final double weight;
+  final bool isRefraoMarker;
+
+  const _EstimatedTimelineItem({
+    required this.chordIdx,
+    required this.lyricIdx,
+    required this.text,
+    required this.weight,
+    required this.isRefraoMarker,
+  });
+}
+
 /// Controlador completo que integra reprodução nativa de áudio (YouTube / MP3)
 /// e rolagem sincronizada com detecção de palavras e destaque exclusivo de acordes ou letra.
 class KaraokeAudioController extends ChangeNotifier {
@@ -138,13 +155,27 @@ class KaraokeAudioController extends ChangeNotifier {
     Duration? duration,
   }) {
     if (_isDisposed) return;
-    _currentPosition = position;
-    if (duration != null && duration > Duration.zero) {
+    if (duration != null && duration > Duration.zero && (duration - _totalDuration).inSeconds.abs() > 2) {
       _totalDuration = duration;
+      if (_captions.isEmpty) {
+        _buildEstimatedTimeline();
+      }
     }
-    _updateDynamicMatching(position);
-    _syncScroll();
-    notifyListeners();
+
+    final diffMs = (position.inMilliseconds - _currentPosition.inMilliseconds).abs();
+    // Se a diferença for grande (> 1500ms), é um salto/seek explícito do usuário no vídeo
+    if (diffMs > 1500) {
+      _currentPosition = position;
+      _updateDynamicMatching(position);
+      _syncScroll();
+      notifyListeners();
+    } else if (position > _currentPosition) {
+      // Se o YouTube estiver ligeiramente à frente, alinha suavemente sem trancos para trás
+      _currentPosition = position;
+      _updateDynamicMatching(position);
+      _syncScroll();
+      notifyListeners();
+    }
   }
 
   void toggleAutoScroll() {
@@ -161,6 +192,7 @@ class KaraokeAudioController extends ChangeNotifier {
     }
 
     _buildLineIndices();
+    _buildEstimatedTimeline();
 
     if (enableNativeAudio) {
       _initNativePlayer();
@@ -170,7 +202,27 @@ class KaraokeAudioController extends ChangeNotifier {
     }
   }
 
-  /// Identifica os índices das linhas de acordes e de letra da música,
+  static bool _isRefraoMarker(String line) {
+    final lower = line.toLowerCase().replaceAll(RegExp(r'[\(\)\[\]\:\-]'), '').trim();
+    return lower == 'refrao' || lower == 'refrão' || lower == 'coro';
+  }
+
+  bool _isHeaderLine(String line) {
+    final lower = line.toLowerCase();
+    final tNorm = song.title.trim().toLowerCase();
+    final aNorm = song.artist.trim().toLowerCase();
+    if (tNorm.isNotEmpty && lower == tNorm) return true;
+    if (aNorm.isNotEmpty && lower == aNorm) return true;
+    if (lower.startsWith('tom:') ||
+        lower.startsWith('tom :') ||
+        lower.startsWith('ritmo:') ||
+        lower.startsWith('afinação:')) {
+      return true;
+    }
+    return false;
+  }
+
+  /// Identifica os índices das linhas de acordes, marcadores estruturais e letra da música,
   /// excluindo metadados de cabeçalho (Título e Artista) antes do início da música.
   void _buildLineIndices() {
     _chordLineIndices.clear();
@@ -192,13 +244,21 @@ class KaraokeAudioController extends ChangeNotifier {
 
     for (int i = 0; i < lines.length; i++) {
       final line = lines[i];
-      if (line.trim().isEmpty) continue;
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+
       if (ChordTransposer.isChordLine(line)) {
         _chordLineIndices.add(i);
-      } else if (!ChordTransposer.isMarker(line) && !RegExp(r'^\[.*\]$').hasMatch(line.trim())) {
+      } else if (ChordTransposer.isMarker(trimmed) || RegExp(r'^\[.*\]$').hasMatch(trimmed)) {
+        // Marcadores de seção como (REFRÃO), [Intro], etc. são incluídos em ambos os modos
+        if (firstMusicLine != -1 && i >= firstMusicLine) {
+          _chordLineIndices.add(i);
+          _lyricsLineIndices.add(i);
+        }
+      } else {
         // Ignora cabeçalhos de título/artista antes do início real da música
         if (firstMusicLine != -1 && i < firstMusicLine) continue;
-        final norm = line.trim().toLowerCase();
+        final norm = trimmed.toLowerCase();
         if (titleNorm.isNotEmpty && norm == titleNorm) continue;
         if (artistNorm.isNotEmpty && norm == artistNorm) continue;
         _lyricsLineIndices.add(i);
@@ -206,6 +266,182 @@ class KaraokeAudioController extends ChangeNotifier {
     }
 
     _buildSections();
+  }
+
+  /// Constrói uma linha do tempo estimada contínua, ponderada e estruturada da música.
+  /// Distribui com fidelidade musical introduções, versos, repetições de (REFRÃO) e solos.
+  void _buildEstimatedTimeline() {
+    _timedLines.clear();
+    final clean = ChordTransposer.cleanText(song.content);
+    final lines = clean.replaceAll('\r\n', '\n').split('\n');
+
+    final items = <_EstimatedTimelineItem>[];
+
+    // Detecta tamanho do refrão de referência caso exista
+    int refraoVersesCount = 4;
+    for (int i = 0; i < lines.length; i++) {
+      final line = lines[i].trim();
+      if (_isRefraoMarker(line)) {
+        int count = 0;
+        for (int j = i + 1; j < lines.length && j <= i + 12; j++) {
+          final sub = lines[j].trim();
+          if (sub.isEmpty) continue;
+          if (_isRefraoMarker(sub) || (ChordTransposer.isMarker(sub) && count > 0)) break;
+          if (!ChordTransposer.isChordLine(sub)) {
+            count++;
+          }
+        }
+        if (count >= 2) {
+          refraoVersesCount = count;
+          break;
+        }
+      }
+    }
+
+    int? pendingChordIdx;
+    String? pendingChordText;
+
+    for (int i = 0; i < lines.length; i++) {
+      final line = lines[i];
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+      if (_isHeaderLine(trimmed)) continue;
+
+      if (_isRefraoMarker(trimmed)) {
+        if (pendingChordIdx != null) {
+          items.add(_EstimatedTimelineItem(
+            chordIdx: pendingChordIdx,
+            lyricIdx: null,
+            text: pendingChordText ?? '',
+            weight: 1.5,
+            isRefraoMarker: false,
+          ));
+          pendingChordIdx = null;
+          pendingChordText = null;
+        }
+        // Marcador de repetição de refrão herda o peso completo do bloco de refrão
+        final weight = (refraoVersesCount * 1.0).clamp(2.5, 5.0);
+        items.add(_EstimatedTimelineItem(
+          chordIdx: i,
+          lyricIdx: i,
+          text: trimmed,
+          weight: weight,
+          isRefraoMarker: true,
+        ));
+        continue;
+      }
+
+      if (ChordTransposer.isMarker(trimmed) || RegExp(r'^\[.*\]$').hasMatch(trimmed)) {
+        if (pendingChordIdx != null) {
+          items.add(_EstimatedTimelineItem(
+            chordIdx: pendingChordIdx,
+            lyricIdx: null,
+            text: pendingChordText ?? '',
+            weight: 1.5,
+            isRefraoMarker: false,
+          ));
+          pendingChordIdx = null;
+          pendingChordText = null;
+        }
+        items.add(_EstimatedTimelineItem(
+          chordIdx: i,
+          lyricIdx: i,
+          text: trimmed,
+          weight: 1.5,
+          isRefraoMarker: false,
+        ));
+        continue;
+      }
+
+      if (ChordTransposer.isChordLine(line)) {
+        if (pendingChordIdx != null) {
+          // A linha anterior era puramente instrumental (ex: introdução)
+          items.add(_EstimatedTimelineItem(
+            chordIdx: pendingChordIdx,
+            lyricIdx: null,
+            text: pendingChordText ?? '',
+            weight: 1.5,
+            isRefraoMarker: false,
+          ));
+        }
+        pendingChordIdx = i;
+        pendingChordText = line;
+      } else {
+        final words = trimmed.split(RegExp(r'\s+')).length;
+        double weight = 1.0;
+        if (words >= 8) {
+          weight = 1.3;
+        } else if (words <= 3) {
+          weight = 0.8;
+        }
+
+        items.add(_EstimatedTimelineItem(
+          chordIdx: pendingChordIdx,
+          lyricIdx: i,
+          text: trimmed,
+          weight: weight,
+          isRefraoMarker: false,
+        ));
+        pendingChordIdx = null;
+        pendingChordText = null;
+      }
+    }
+
+    if (pendingChordIdx != null) {
+      items.add(_EstimatedTimelineItem(
+        chordIdx: pendingChordIdx,
+        lyricIdx: null,
+        text: pendingChordText ?? '',
+        weight: 1.0,
+        isRefraoMarker: false,
+      ));
+    }
+
+    if (items.isEmpty) return;
+
+    // Detecta se a música tem introdução explícita ou instrumental antes da primeira linha cantada
+    bool hasIntro = false;
+    for (int i = 0; i < lines.length; i++) {
+      final trimmed = lines[i].trim();
+      if (trimmed.isEmpty || _isHeaderLine(trimmed)) continue;
+      if (ChordTransposer.isMarker(trimmed) &&
+          (trimmed.toLowerCase().contains('intro') || trimmed.toLowerCase().contains('solo'))) {
+        hasIntro = true;
+        break;
+      }
+      if (!ChordTransposer.isChordLine(trimmed)) {
+        break;
+      }
+    }
+
+    final totalMs = _totalDuration.inMilliseconds > 0
+        ? _totalDuration.inMilliseconds
+        : 210000;
+
+    final introMs = hasIntro ? (totalMs * 0.05).clamp(4000, 15000).toInt() : 0;
+    final outroMs = (totalMs * 0.03).clamp(2000, 8000).toInt();
+    final songBodyMs = (totalMs - introMs - outroMs).clamp(10000, totalMs);
+
+    final totalWeight = items.fold<double>(0.0, (sum, it) => sum + it.weight);
+    final msPerWeight = totalWeight > 0 ? songBodyMs / totalWeight : 1000.0;
+
+    int accumMs = 0;
+    _firstVocalTimestamp = hasIntro ? Duration(milliseconds: introMs) : Duration.zero;
+
+    for (int idx = 0; idx < items.length; idx++) {
+      final it = items[idx];
+      _timedLines.add(TimedSongLine(
+        startTime: Duration(milliseconds: accumMs),
+        lyricLineIndex: it.lyricIdx ?? (_lyricsLineIndices.isNotEmpty ? _lyricsLineIndices.first : (it.chordIdx ?? 0)),
+        chordLineIndex: it.chordIdx,
+        text: it.text,
+      ));
+      if (idx == 0 && hasIntro && introMs > 0) {
+        accumMs += introMs;
+      } else {
+        accumMs += (it.weight * msPerWeight).round();
+      }
+    }
   }
 
   /// Pré-carrega legendas e fluxo de áudio do YouTube em segundo plano
@@ -622,19 +858,23 @@ class KaraokeAudioController extends ChangeNotifier {
     // 1. Linha do tempo sequencial e precisa do karaokê
     if (_timedLines.isNotEmpty) {
       if (_firstVocalTimestamp != null && _currentPosition < _firstVocalTimestamp!) {
-        return null; // O canto ainda não começou (introdução)
+        // Quando há legendas reais (ClosedCaptions), o vocal ainda não começou
+        if (_captions.isNotEmpty) {
+          return null;
+        }
+        return _lyricsLineIndices.first; // Na introdução estimada, posiciona na primeira linha cantada
       }
       final past = _timedLines.where((t) => t.startTime <= _currentPosition);
       if (past.isNotEmpty) {
         return past.last.lyricLineIndex;
       }
-      return null;
+      return _captions.isNotEmpty ? null : _lyricsLineIndices.first;
     }
 
     // 2. Interpretação em tempo real das legendas/áudio
     if (_captions.isNotEmpty) {
       if (_firstVocalTimestamp != null && _currentPosition < _firstVocalTimestamp!) {
-        return null; // O canto ainda não começou (introdução)
+        return null;
       }
       return _activeDynamicLyric ?? _lyricsLineIndices.first;
     }

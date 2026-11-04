@@ -61,7 +61,17 @@ class SyncService extends ChangeNotifier {
       await _run();
       lastSync = DateTime.now();
     } catch (e) {
-      error = '$e';
+      final msg = e.toString().toLowerCase();
+      if (msg.contains('clientexception') ||
+          msg.contains('load failed') ||
+          msg.contains('socketexception') ||
+          msg.contains('timeout') ||
+          msg.contains('failed host lookup') ||
+          msg.contains('network is unreachable')) {
+        error = 'Não foi possível conectar à Nuvem. Verifique sua conexão com a internet e tente novamente.';
+      } else {
+        error = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
+      }
     }
     _running = false;
     syncing = false;

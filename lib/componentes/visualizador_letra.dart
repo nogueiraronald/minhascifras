@@ -117,10 +117,10 @@ class _LyricsViewState extends State<LyricsView> {
       }
     }
 
-    // Mapeia índices exclusivos das linhas reais de letra (exclui marcadores e vazias)
+    // Mapeia índices exclusivos das linhas reais de letra e marcadores estruturais
     final lyricIndices = <int>[];
     for (int i = 0; i < displayLines.length; i++) {
-      if (!displayLines[i].isMarker && !displayLines[i].isEmpty) {
+      if (!displayLines[i].isEmpty) {
         lyricIndices.add(i);
       }
     }
@@ -162,8 +162,8 @@ class _LyricsViewState extends State<LyricsView> {
       itemCount: displayLines.length,
       itemBuilder: (context, index) {
         final item = displayLines[index];
-        final isLyric = !item.isMarker && !item.isEmpty;
-        // No modo letra, APENAS linhas de letra podem ser ressaltadas!
+        final isLyric = !item.isEmpty;
+        // No modo letra, linhas de letra E marcadores estruturais podem ser ressaltados!
         final isActive = isLyric && resolvedActiveLyricIndex != null && index == resolvedActiveLyricIndex;
 
         if (item.isEmpty) {
@@ -171,17 +171,23 @@ class _LyricsViewState extends State<LyricsView> {
         }
 
         if (item.isMarker) {
-          return Padding(
+          final markerWidget = Padding(
             padding: const EdgeInsets.only(top: 18, bottom: 8),
             child: Row(
               children: [
-                Container(
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: scheme.primary.withValues(alpha: 0.12),
+                    color: isActive
+                        ? (isDark
+                            ? AppCores.roxo.withValues(alpha: 0.28)
+                            : AppCores.rosa.withValues(alpha: 0.12))
+                        : scheme.primary.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: scheme.primary.withValues(alpha: 0.4),
+                      color: isActive ? AppCores.rosa : scheme.primary.withValues(alpha: 0.4),
+                      width: isActive ? 1.5 : 1.0,
                     ),
                   ),
                   child: Text(
@@ -189,13 +195,19 @@ class _LyricsViewState extends State<LyricsView> {
                     style: TextStyle(
                       fontSize: (widget.fontSize * 0.85).clamp(11.0, 18.0),
                       fontWeight: FontWeight.bold,
-                      color: scheme.primary,
+                      color: isActive ? AppCores.rosa : scheme.primary,
                       letterSpacing: 0.5,
                     ),
                   ),
                 ),
               ],
             ),
+          );
+
+          return _ActiveKaraokeLine(
+            key: ValueKey(index),
+            isActive: isActive && widget.autoScroll,
+            child: markerWidget,
           );
         }
 

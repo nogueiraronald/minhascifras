@@ -144,6 +144,24 @@ class _YoutubePlayerEmbedViewState extends State<_YoutubePlayerEmbedView> {
     _sendIframeCommand(_iframe, func, args);
   }
 
+  Timer? _pauseDebounceTimer;
+
+  void _handlePlayerState(dynamic state) {
+    if (state == 1) {
+      _pauseDebounceTimer?.cancel();
+      widget.controller?.onYoutubeStateChanged(isPlaying: true);
+    } else if (state == 0) {
+      _pauseDebounceTimer?.cancel();
+      widget.controller?.onYoutubeStateChanged(isPlaying: false);
+    } else if (state == 2) {
+      // Debounce suave para evitar que pequenos bufferings de 200ms congelem o karaokê
+      _pauseDebounceTimer?.cancel();
+      _pauseDebounceTimer = Timer(const Duration(milliseconds: 500), () {
+        widget.controller?.onYoutubeStateChanged(isPlaying: false);
+      });
+    }
+  }
+
   void _startMessageListener() {
     _messageSub?.cancel();
     _messageSub = html.window.onMessage.listen((event) {
@@ -169,20 +187,10 @@ class _YoutubePlayerEmbedViewState extends State<_YoutubePlayerEmbedView> {
           }
 
           if (info.containsKey('playerState')) {
-            final state = info['playerState'];
-            if (state == 1) {
-              widget.controller?.onYoutubeStateChanged(isPlaying: true);
-            } else if (state == 2 || state == 0) {
-              widget.controller?.onYoutubeStateChanged(isPlaying: false);
-            }
+            _handlePlayerState(info['playerState']);
           }
         } else if (eventName == 'onStateChange') {
-          final state = raw['info'];
-          if (state == 1) {
-            widget.controller?.onYoutubeStateChanged(isPlaying: true);
-          } else if (state == 2 || state == 0) {
-            widget.controller?.onYoutubeStateChanged(isPlaying: false);
-          }
+          _handlePlayerState(raw['info']);
         }
       } catch (_) {}
     });
@@ -190,7 +198,7 @@ class _YoutubePlayerEmbedViewState extends State<_YoutubePlayerEmbedView> {
     // Envia sinal periódico de listening para manter a entrega de eventos do YouTube ativa
     _progressPollTimer?.cancel();
     _progressPollTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (_iframe != null && widget.controller?.isPlaying == true) {
+      if (_iframe != null) {
         _sendIframeCommand(_iframe, 'listening');
       }
     });
@@ -198,6 +206,7 @@ class _YoutubePlayerEmbedViewState extends State<_YoutubePlayerEmbedView> {
 
   @override
   void dispose() {
+    _pauseDebounceTimer?.cancel();
     _messageSub?.cancel();
     _progressPollTimer?.cancel();
     _detachController(widget.controller);
