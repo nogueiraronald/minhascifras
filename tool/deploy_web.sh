@@ -73,16 +73,29 @@ cp build/web/index.html build/web/404.html
 # 5. Ajusta flutter_bootstrap.js:
 # - Desabilita o service worker legado do Flutter para não competir com nosso sw.js
 # - Força o CanvasKit a carregar os binários da pasta local canvaskit/ (garante offline sem gstatic.com)
+# - Fornece fallback resiliente de WebAssembly para WebKit / iOS Safari caso compileStreaming falhe
+# - Oculta a tela de loading ao inicializar o Flutter
 python3 -c "
+import re
+
 with open('build/web/flutter_bootstrap.js', 'r') as f:
     code = f.read()
 
 # Desativa o worker concorrente legado do Flutter e direciona CanvasKit para pasta local
-code = code.replace('\"serviceWorkerVersion\":', '\"_disabled_sw\":')
-code = code.replace('serviceWorkerSettings:{', 'serviceWorkerSettings:null,config:{canvasKitBaseUrl:\"canvaskit/\"},_old:{')
+code = re.sub(r'serviceWorkerSettings\s*:\s*\{', 'serviceWorkerSettings: null, config: {canvasKitBaseUrl: \"canvaskit/\"}, _old: {', code)
+code = re.sub(r'\"serviceWorkerVersion\"\s*:', '\"_disabled_sw\":', code)
 
-# Garante fallback local no resolvedor de URL do CanvasKit
-code = code.replace('e.engineRevision&&!e.useLocalCanvasKit?I(\"https://www.gstatic.com/flutter-canvaskit\",e.engineRevision):\"canvaskit\"', '\"canvaskit\"')
+# Resiliência WebAssembly para Safari iOS: fallback se compileStreaming falhar
+old_k = 'var k=i=>{let e=WebAssembly.compileStreaming(fetch(i));return(n,t)=>((async()=>{let r=await e,a=await WebAssembly.instantiate(r,n);t(a,r)})(),{})};'
+new_k = 'var k=i=>{let e=(async()=>{try{if(typeof WebAssembly.compileStreaming===\"function\"){return await WebAssembly.compileStreaming(fetch(i));}}catch(_){}let r=await fetch(i);let b=await r.arrayBuffer();return await WebAssembly.compile(b);})();return(n,t)=>((async()=>{let r=await e,a=await WebAssembly.instantiate(r,n);t(a,r)})(),{})};'
+if old_k in code:
+    code = code.replace(old_k, new_k)
+
+# Garante que a tela de loading inicial seja removida assim que o Flutter renderizar
+old_run = 'l.initializeEngine(t).then(u=>u.runApp())'
+new_run = 'l.initializeEngine(t).then(u=>u.runApp()).then(()=>{try{var loader=document.getElementById(\"loading-screen\");if(loader){loader.style.opacity=\"0\";setTimeout(function(){loader.remove();},400);}}catch(e){}})'
+if old_run in code:
+    code = code.replace(old_run, new_run)
 
 with open('build/web/flutter_bootstrap.js', 'w') as f:
     f.write(code)
