@@ -47,7 +47,10 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: DesktopLoginDialog(account: account),
+            body: DesktopLoginDialog(
+              account: account,
+              initialShowEmailLogin: false,
+            ),
           ),
         ),
       );
@@ -78,7 +81,10 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: DesktopLoginDialog(account: account),
+            body: DesktopLoginDialog(
+              account: account,
+              initialShowEmailLogin: false,
+            ),
           ),
         ),
       );

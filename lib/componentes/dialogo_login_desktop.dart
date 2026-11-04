@@ -30,7 +30,7 @@ class DesktopLoginDialog extends StatefulWidget {
     this.songs,
     this.setlists,
     this.sync,
-    this.initialShowEmailLogin = false,
+    this.initialShowEmailLogin = true,
   });
 
   final AccountController account;
@@ -45,7 +45,7 @@ class DesktopLoginDialog extends StatefulWidget {
     SongRepository? songs,
     SetlistRepository? setlists,
     SyncService? sync,
-    bool initialShowEmailLogin = false,
+    bool initialShowEmailLogin = true,
   }) {
     return showDialog<void>(
       context: context,
@@ -569,10 +569,10 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
                 keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
                 child: _showManualInput
                     ? _buildManualInputView(context, isDark)
-                    : _showEmailLogin
-                        ? _buildEmailLoginView(context, isDark)
-                        : widget.account.isLoggedIn
-                            ? _buildLoggedInView(context, isDark, isSmallScreen)
+                    : widget.account.isLoggedIn
+                        ? _buildLoggedInView(context, isDark, isSmallScreen)
+                        : _showEmailLogin
+                            ? _buildEmailLoginView(context, isDark)
                             : _buildQrCodeView(context, isDark, currentCode, syncUrl, isSmallScreen),
               ),
             ),
@@ -772,15 +772,12 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
       children: [
         Row(
           children: [
-            IconButton(
-              tooltip: 'Voltar ao QR Code',
-              icon: const Icon(Icons.arrow_back_rounded, size: 22),
-              onPressed: () => setState(() {
-                _showEmailLogin = false;
-                _error = null;
-              }),
+            const BadgeIconeGradiente(
+              icon: Icons.account_circle_rounded,
+              size: 42,
+              iconSize: 22,
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -795,7 +792,7 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'Baixe suas músicas neste aparelho',
+                    'Baixe e sincronize suas músicas neste aparelho',
                     style: TextStyle(
                       fontSize: 11.5,
                       color: isDark ? Colors.grey[400] : Colors.grey[600],
