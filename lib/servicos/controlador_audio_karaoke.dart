@@ -113,6 +113,40 @@ class KaraokeAudioController extends ChangeNotifier {
   bool get isYoutube => song.audioType == 'youtube';
   bool get isNativeAudio => true;
 
+  // Callbacks para controle bidirecional do player embutido (YouTube)
+  VoidCallback? onPlayYoutube;
+  VoidCallback? onPauseYoutube;
+  void Function(Duration position)? onSeekYoutube;
+  void Function(double volume)? onVolumeYoutube;
+  void Function(bool isMuted)? onMuteYoutube;
+
+  /// Atualiza o estado de reprodução vindo do player do YouTube
+  void onYoutubeStateChanged({required bool isPlaying}) {
+    if (_isDisposed) return;
+    _isPlaying = isPlaying;
+    if (_isPlaying) {
+      _startKaraokeClock();
+    } else {
+      _karaokeTimer?.cancel();
+    }
+    notifyListeners();
+  }
+
+  /// Sincroniza a posição exata de reprodução vinda do YouTube com a cifra em tempo real
+  void updateYoutubePlayback({
+    required Duration position,
+    Duration? duration,
+  }) {
+    if (_isDisposed) return;
+    _currentPosition = position;
+    if (duration != null && duration > Duration.zero) {
+      _totalDuration = duration;
+    }
+    _updateDynamicMatching(position);
+    _syncScroll();
+    notifyListeners();
+  }
+
   void toggleAutoScroll() {
     _isAutoScrollEnabled = !_isAutoScrollEnabled;
     notifyListeners();
@@ -693,6 +727,7 @@ class KaraokeAudioController extends ChangeNotifier {
     if (isYoutube) {
       _isPlaying = true;
       _startKaraokeClock();
+      onPlayYoutube?.call();
       notifyListeners();
 
       // No ambiente Nativo (macOS, iOS, Android), tenta em segundo plano extrair o stream
@@ -753,6 +788,9 @@ class KaraokeAudioController extends ChangeNotifier {
 
   Future<void> pause() async {
     _karaokeTimer?.cancel();
+    if (isYoutube) {
+      onPauseYoutube?.call();
+    }
     if (_player != null) {
       try {
         await _player!.pause().timeout(const Duration(milliseconds: 200), onTimeout: () {});
@@ -770,6 +808,10 @@ class KaraokeAudioController extends ChangeNotifier {
     }
     if (_currentPosition < Duration.zero) {
       _currentPosition = Duration.zero;
+    }
+
+    if (isYoutube) {
+      onSeekYoutube?.call(_currentPosition);
     }
 
     if (enableNativeAudio && _player != null) {
@@ -800,6 +842,9 @@ class KaraokeAudioController extends ChangeNotifier {
   Future<void> setVolume(double val) async {
     _volume = val.clamp(0.0, 1.0);
     _isMuted = false;
+    if (isYoutube) {
+      onVolumeYoutube?.call(_volume);
+    }
     if (_player != null) {
       try {
         await _player!.setVolume(_volume).timeout(const Duration(milliseconds: 200), onTimeout: () {});
@@ -811,6 +856,9 @@ class KaraokeAudioController extends ChangeNotifier {
   /// Alterna mudo do áudio
   Future<void> toggleMute() async {
     _isMuted = !_isMuted;
+    if (isYoutube) {
+      onMuteYoutube?.call(_isMuted);
+    }
     if (_player != null) {
       try {
         await _player!.setVolume(_isMuted ? 0.0 : _volume).timeout(const Duration(milliseconds: 200), onTimeout: () {});

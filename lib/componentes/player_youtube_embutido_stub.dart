@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../servicos/controlador_audio_karaoke.dart';
 
 Widget buildYoutubePlayerView({
   required BuildContext context,
   required String videoId,
+  KaraokeAudioController? controller,
   VoidCallback? onClose,
 }) {
   final isDark = Theme.of(context).brightness == Brightness.dark;

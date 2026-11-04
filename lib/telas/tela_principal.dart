@@ -123,12 +123,12 @@ class _MainScreenState extends State<MainScreen> {
   // Player de Áudio & Karaokê Sincronizado
   KaraokeAudioController? _karaokeController;
   bool _showKaraokePlayer = true;
-  bool _showYoutubeVideo = false;
+  bool _showYoutubeVideo = true;
 
   void _initKaraokeController(Song? song) {
     _karaokeController?.dispose();
     _karaokeController = null;
-    _showYoutubeVideo = false;
+    _showYoutubeVideo = true;
     if (song != null && song.hasAudio) {
       _karaokeController = KaraokeAudioController(
         song: song,
@@ -2028,17 +2028,23 @@ class _MainScreenState extends State<MainScreen> {
                 ),
               ),
 
-              // Player de vídeo do YouTube embutido (Picture-in-Picture) integrado à cifra
-              if (_showYoutubeVideo &&
-                  _currentSong?.hasAudio == true &&
+              // Player de vídeo do YouTube embutido (Picture-in-Picture) integrado à cifra com persistência de áudio
+              if (_currentSong?.hasAudio == true &&
                   _currentSong?.audioType == 'youtube' &&
                   Song.extractYoutubeVideoId(_currentSong!.audioUrl!) != null)
                 Positioned(
                   right: 12,
                   bottom: 8,
-                  child: PlayerYoutubeEmbutido(
-                    videoId: Song.extractYoutubeVideoId(_currentSong!.audioUrl!)!,
-                    onClose: () => setState(() => _showYoutubeVideo = false),
+                  child: Visibility(
+                    visible: _showYoutubeVideo,
+                    maintainState: true,
+                    maintainAnimation: true,
+                    maintainSize: false,
+                    child: PlayerYoutubeEmbutido(
+                      videoId: Song.extractYoutubeVideoId(_currentSong!.audioUrl!)!,
+                      controller: _karaokeController,
+                      onClose: () => setState(() => _showYoutubeVideo = false),
+                    ),
                   ),
                 ),
             ],

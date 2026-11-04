@@ -49,7 +49,7 @@ class _SongReaderScreenState extends State<SongReaderScreen> {
 
   KaraokeAudioController? _karaokeController;
   bool _showKaraokePlayer = true;
-  bool _showYoutubeVideo = false;
+  bool _showYoutubeVideo = true;
 
   Song get _song => _songs[_index];
 
@@ -61,7 +61,7 @@ class _SongReaderScreenState extends State<SongReaderScreen> {
 
   void _initKaraoke(Song song) {
     _karaokeController?.dispose();
-    _showYoutubeVideo = false;
+    _showYoutubeVideo = true;
     if (song.hasAudio) {
       _karaokeController = KaraokeAudioController(
         song: song,
@@ -236,16 +236,22 @@ class _SongReaderScreenState extends State<SongReaderScreen> {
                 isVideoVisible: _showYoutubeVideo,
               ),
             ),
-          if (_showYoutubeVideo &&
-              _song.hasAudio &&
+          if (_song.hasAudio &&
               _song.audioType == 'youtube' &&
               Song.extractYoutubeVideoId(_song.audioUrl!) != null)
             Positioned(
               right: 12,
               bottom: 56,
-              child: PlayerYoutubeEmbutido(
-                videoId: Song.extractYoutubeVideoId(_song.audioUrl!)!,
-                onClose: () => setState(() => _showYoutubeVideo = false),
+              child: Visibility(
+                visible: _showYoutubeVideo,
+                maintainState: true,
+                maintainAnimation: true,
+                maintainSize: false,
+                child: PlayerYoutubeEmbutido(
+                  videoId: Song.extractYoutubeVideoId(_song.audioUrl!)!,
+                  controller: _karaokeController,
+                  onClose: () => setState(() => _showYoutubeVideo = false),
+                ),
               ),
             ),
         ],
