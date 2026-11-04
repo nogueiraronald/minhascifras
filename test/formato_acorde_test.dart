@@ -33,8 +33,8 @@ void main() {
     expect(parsedWithOverride.toText(), equals('4,6,6,4,4,4;1,3,4,1,1,1;4'));
   });
 
-  test('AppConfig contains required Google OAuth credentials', () {
-    expect(AppConfig.googleClientId, contains('apps.googleusercontent.com'));
-    expect(AppConfig.googleClientSecret.isNotEmpty, isTrue);
+  test('AppConfig contains required Supabase credentials', () {
+    expect(AppConfig.supabaseUrl, contains('supabase.co'));
+    expect(AppConfig.supabaseAnonKey.isNotEmpty, isTrue);
   });
 }

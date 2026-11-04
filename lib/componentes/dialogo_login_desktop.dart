@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../dados/controlador_conta.dart';
 import 'estilo_app.dart';
 
-/// Diálogo de login seguro com Conta Google (Web e Desktop).
-/// O Google Client ID é 100% interno e transparente para o usuário.
+/// Diálogo de Sincronização em Nuvem via Supabase (sem exigência de login ou senha).
 class DesktopLoginDialog extends StatefulWidget {
   const DesktopLoginDialog({super.key, required this.account});
 
@@ -22,140 +22,85 @@ class DesktopLoginDialog extends StatefulWidget {
 }
 
 class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
+  final _codeCtrl = TextEditingController();
   bool _loading = false;
   String? _error;
+  bool _showConnectInput = false;
 
-  Future<void> _login() async {
+  @override
+  void dispose() {
+    _codeCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _connectToCode() async {
+    final code = _codeCtrl.text.trim();
+    if (code.isEmpty) {
+      setState(() => _error = 'Por favor, digite o código de sincronização.');
+      return;
+    }
+
     setState(() {
       _loading = true;
       _error = null;
     });
 
     try {
-      await widget.account.signIn();
+      await widget.account.connectToSyncCode(code);
       if (!mounted) return;
-      if (widget.account.status == AccountStatus.ready) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-                'Conectado como ${widget.account.email}! Sincronizando cifras...'),
-            backgroundColor: Colors.green[800],
-          ),
-        );
-      } else {
-        setState(() {
-          _loading = false;
-        });
-      }
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Conectado ao repertório $code com sucesso!'),
+          backgroundColor: Colors.green[800],
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = e
-            .toString()
-            .replaceFirst(RegExp(r'^(Exception|StateError):\s*'), '');
+        _error = e.toString().replaceFirst(RegExp(r'^(Exception|StateError):\s*'), '');
       });
+    }
+  }
+
+  Future<void> _generateNewCode() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Gerar Novo Código?'),
+        content: const Text(
+          'Isso criará uma nova chave para este aparelho. O repertório atual continuará salvo localmente.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Gerar Novo'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _loading = true);
+    await widget.account.generateNewSyncCode();
+    if (mounted) {
+      setState(() => _loading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isLogged = widget.account.status == AccountStatus.ready;
+    final currentCode = widget.account.syncCode ?? '---';
 
-    // Usuário já conectado
-    if (isLogged) {
-      return CartaoDialogoModerno(
-        width: 440,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                const BadgeIconeGradiente(
-                  icon: Icons.cloud_done_rounded,
-                  size: 44,
-                  iconSize: 22,
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Conta Google Conectada',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: isDark ? Colors.white : Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        widget.account.email ?? '',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppCores.roxo,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.05)
-                    : Colors.black.withValues(alpha: 0.03),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.08)
-                      : Colors.black.withValues(alpha: 0.06),
-                ),
-              ),
-              child: Text(
-                'Suas cifras e setlists estão sincronizadas com segurança com o seu Google Drive.',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: isDark ? Colors.grey[300] : Colors.grey[700],
-                ),
-              ),
-            ),
-            const SizedBox(height: 22),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () {
-                    widget.account.signOut();
-                    Navigator.pop(context);
-                  },
-                  child: const Text('Desconectar / Sair',
-                      style: TextStyle(color: Colors.red)),
-                ),
-                const SizedBox(width: 8),
-                BotaoGradiente(
-                  onPressed: () => Navigator.pop(context),
-                  label: 'Fechar',
-                  icon: Icons.check_rounded,
-                ),
-              ],
-            ),
-          ],
-        ),
-      );
-    }
-
-    // Usuário não conectado
     return CartaoDialogoModerno(
-      width: 440,
+      width: 460,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -164,8 +109,8 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
             children: [
               const BadgeIconeGradiente(
                 icon: Icons.cloud_sync_rounded,
-                size: 44,
-                iconSize: 22,
+                size: 46,
+                iconSize: 24,
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -173,7 +118,7 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Conectar com o Google',
+                      'Sincronização em Nuvem',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
@@ -182,7 +127,7 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Sincronize seu repertório na nuvem',
+                      'Backup automático no Supabase',
                       style: TextStyle(
                         fontSize: 12,
                         color: isDark ? Colors.grey[400] : Colors.grey[600],
@@ -193,36 +138,152 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
+
+          // Cartão do Código deste Aparelho
           Container(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppCores.roxo.withValues(alpha: isDark ? 0.12 : 0.06),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppCores.roxo.withValues(alpha: 0.2)),
+              color: AppCores.roxo.withValues(alpha: isDark ? 0.15 : 0.07),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppCores.roxo.withValues(alpha: 0.25)),
             ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Icon(Icons.shield_outlined,
-                    color: AppCores.roxo, size: 22),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Faça login com sua Conta Google com total segurança e sem nenhum custo.\n\n'
-                    'Suas cifras e setlists ficam salvas na nuvem para você acessar de qualquer aparelho.',
-                    style: TextStyle(
-                      fontSize: 13,
-                      height: 1.4,
-                      color: isDark ? Colors.grey[300] : Colors.grey[800],
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Chave deste dispositivo:',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.grey[300] : Colors.grey[700],
+                      ),
                     ),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(6),
+                      onTap: () {
+                        Clipboard.setData(ClipboardData(text: currentCode));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Código $currentCode copiado!'),
+                            duration: const Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.copy_rounded, size: 14, color: AppCores.roxo),
+                            SizedBox(width: 4),
+                            Text(
+                              'Copiar',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: AppCores.roxo,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                SelectableText(
+                  currentCode,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 2,
+                    color: AppCores.roxo,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Suas cifras e setlists são salvas automaticamente na nuvem sem precisar de senha ou cadastro.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.35,
+                    color: isDark ? Colors.grey[400] : Colors.grey[600],
                   ),
                 ),
               ],
             ),
           ),
+
+          const SizedBox(height: 14),
+
+          // Seção: Conectar a outro aparelho
+          if (!_showConnectInput) ...[
+            OutlinedButton.icon(
+              onPressed: () => setState(() => _showConnectInput = true),
+              icon: const Icon(Icons.devices_rounded, size: 18),
+              label: const Text('Conectar a outro celular ou computador'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ] else ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.03),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.08),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Digite a chave do outro aparelho para sincronizar o mesmo repertório:',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? Colors.grey[300] : Colors.grey[700],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _codeCtrl,
+                          textCapitalization: TextCapitalization.characters,
+                          decoration: InputDecoration(
+                            hintText: 'Ex: MC-8492',
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      BotaoGradiente(
+                        onPressed: _loading ? null : _connectToCode,
+                        isLoading: _loading,
+                        label: 'Conectar',
+                        icon: Icons.link_rounded,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+
           if (_error != null) ...[
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
@@ -232,49 +293,30 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
               ),
               child: Text(
                 _error!,
-                style: const TextStyle(
-                    color: Colors.red, fontSize: 12, height: 1.3),
+                style: const TextStyle(color: Colors.red, fontSize: 12, height: 1.3),
               ),
             ),
           ],
-          if (_loading) ...[
-            const SizedBox(height: 16),
-            const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2)),
-                SizedBox(width: 12),
-                Text('Conectando ao Google...', style: TextStyle(fontSize: 13)),
-              ],
-            ),
-          ],
-          const SizedBox(height: 20),
+
+          const SizedBox(height: 18),
+
           Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               TextButton(
-                onPressed: _loading ? null : () => Navigator.pop(context),
-                style: TextButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-                ),
+                onPressed: _generateNewCode,
                 child: Text(
-                  'Cancelar',
+                  'Novo código',
                   style: TextStyle(
-                    color: isDark ? Colors.grey[400] : Colors.grey[700],
-                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                    color: isDark ? Colors.grey[400] : Colors.grey[600],
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
               BotaoGradiente(
-                onPressed: _loading ? null : _login,
-                isLoading: _loading,
-                icon: Icons.login_rounded,
-                label: 'Entrar com Google',
+                onPressed: () => Navigator.pop(context),
+                label: 'Concluído',
+                icon: Icons.check_rounded,
               ),
             ],
           ),

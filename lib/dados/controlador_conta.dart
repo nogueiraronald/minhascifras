@@ -1,136 +1,103 @@
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../servicos/servico_autenticacao_desktop.dart';
-import '../servicos/servico_autenticacao_google.dart';
-import '../servicos/servico_planilhas_google.dart';
-
 enum AccountStatus { signedOut, working, ready, error }
 
-/// Estado da conta Google e da planilha do usuário.
+/// Controlador do código de sincronização do Supabase para backup sem conta/senha.
 class AccountController extends ChangeNotifier {
-  AccountController._(this._auth, this._sheets, this._prefs);
+  AccountController._(this._prefs);
 
-  final GoogleAuthService _auth;
-  final SheetsService _sheets;
   final SharedPreferences _prefs;
+  static const String _kSyncCode = 'supabase_sync_code';
 
-  AccountStatus status = AccountStatus.signedOut;
-  String? email;
-  String? spreadsheetId;
+  AccountStatus status = AccountStatus.ready;
+  String? syncCode;
   String? error;
 
-  SheetsService get sheets => _sheets;
-  GoogleAuthService get auth => _auth;
+  /// Mantido para compatibilidade com a UI
+  String? get email => syncCode != null ? 'Código: $syncCode' : null;
+  String? get spreadsheetId => syncCode;
 
   static Future<AccountController> open() async {
     final prefs = await SharedPreferences.getInstance();
-    final auth = GoogleAuthService();
-    return AccountController._(auth, SheetsService(auth), prefs);
+    final controller = AccountController._(prefs);
+    await controller.restore();
+    return controller;
   }
 
-  /// Retoma a sessão anterior sem abrir tela de login.
+  /// Carrega o código existente ou gera automaticamente um código único na primeira abertura
   Future<void> restore() async {
     try {
-      if (kIsWeb && Uri.base.queryParameters.containsKey('code')) {
-        final webUser = await DesktopAuthService.handleWebOAuthCallback();
-        if (webUser != null) {
-          final userInfo = AuthUserInfo(email: webUser.email, authHeaders: webUser.authHeaders);
-          await _setup(userInfo);
-          return;
-        }
+      var saved = _prefs.getString(_kSyncCode);
+      if (saved == null || saved.trim().isEmpty) {
+        saved = _generateCode();
+        await _prefs.setString(_kSyncCode, saved);
       }
-
-      final u = await _auth.signInSilently();
-      if (u != null) await _setup(u);
-    } catch (_) {
-      // Sem rede ou sem configuração: o app segue funcionando localmente.
-    }
-  }
-
-  Future<void> signIn({String? desktopClientId}) async {
-    _update(AccountStatus.working);
-    try {
-      final u = await _auth.signIn(desktopClientId: desktopClientId);
-      if (u == null) {
-        _update(AccountStatus.signedOut);
-        return;
-      }
-      await _setup(u);
+      syncCode = saved;
+      status = AccountStatus.ready;
+      error = null;
     } catch (e) {
       error = '$e';
-      _update(AccountStatus.error);
-      rethrow;
+      status = AccountStatus.error;
     }
+    notifyListeners();
   }
 
-  Future<void> signInDirectToken({
-    required String accessToken,
-    required String email,
-  }) async {
+  /// Conecta a um repertório existente através de um código fornecido pelo usuário
+  Future<void> connectToSyncCode(String newCode) async {
+    final clean = newCode.trim().toUpperCase();
+    if (clean.isEmpty) return;
+
     _update(AccountStatus.working);
     try {
-      final u = await _auth.signInDirectToken(accessToken: accessToken, email: email);
-      await _setup(u);
-    } catch (e) {
-      error = '$e';
-      _update(AccountStatus.error);
-      rethrow;
-    }
-  }
-
-  Future<void> retry() async {
-    error = null;
-    if (email != null) {
-      await _prefs.remove('drive_backup_id_$email');
-      await _prefs.remove('sheet_id_$email');
-    }
-    await restore();
-  }
-
-  Future<void> signOut() async {
-    await _auth.signOut();
-    email = null;
-    spreadsheetId = null;
-    error = null;
-    _update(AccountStatus.signedOut);
-  }
-
-  /// Permite vincular um arquivo de backup ou planilha existente fornecendo a URL ou ID
-  Future<void> linkSpreadsheetId(String newId) async {
-    if (email == null) return;
-    var cleanId = newId.trim();
-    final match = RegExp(r'/d/([a-zA-Z0-9-_]+)').firstMatch(cleanId);
-    if (match != null) {
-      cleanId = match.group(1)!;
-    }
-    if (cleanId.isEmpty) return;
-    final key = 'drive_backup_id_$email';
-    await _prefs.setString(key, cleanId);
-    spreadsheetId = cleanId;
-    error = null;
-    _update(AccountStatus.ready);
-  }
-
-  Future<void> _setup(AuthUserInfo u) async {
-    email = u.email;
-    _update(AccountStatus.working);
-    try {
-      final key = 'drive_backup_id_${u.email}';
-      var id = _prefs.getString(key);
-      id ??= await _sheets.ensureSpreadsheet();
-      await _prefs.setString(key, id);
-      spreadsheetId = id;
+      await _prefs.setString(_kSyncCode, clean);
+      syncCode = clean;
       error = null;
       _update(AccountStatus.ready);
     } catch (e) {
       error = '$e';
       _update(AccountStatus.error);
+      rethrow;
     }
+  }
+
+  /// Gera um novo código para começar um novo repertório do zero
+  Future<String> generateNewSyncCode() async {
+    final newCode = _generateCode();
+    await _prefs.setString(_kSyncCode, newCode);
+    syncCode = newCode;
+    error = null;
+    _update(AccountStatus.ready);
+    return newCode;
+  }
+
+  /// Compatibilidade com chamadas signIn existentes
+  Future<void> signIn({String? desktopClientId}) async {
+    await restore();
+  }
+
+  /// Compatibilidade com chamadas signOut existentes
+  Future<void> signOut() async {
+    await generateNewSyncCode();
+  }
+
+  Future<void> retry() async {
+    await restore();
   }
 
   void _update(AccountStatus s) {
     status = s;
     notifyListeners();
+  }
+
+  static String _generateCode() {
+    const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+    final random = Random.secure();
+    final buffer = StringBuffer('MC-');
+    for (var i = 0; i < 6; i++) {
+      buffer.write(chars[random.nextInt(chars.length)]);
+    }
+    return buffer.toString();
   }
 }

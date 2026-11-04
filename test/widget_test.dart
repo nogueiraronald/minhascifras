@@ -1,6 +1,6 @@
 import 'package:cifras_app/servicos/transpositor_acordes.dart';
 import 'package:cifras_app/servicos/servico_importacao_cifra.dart';
-import 'package:cifras_app/servicos/servico_autenticacao_google.dart';
+import 'package:cifras_app/servicos/servico_supabase_sync.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -29,8 +29,8 @@ void main() {
     final transposedCommas = ChordTransposer.transposeContent('G, G7, C, G', 2);
     expect(transposedCommas, equals('A, A7, D, A'));
   });
-  test('GoogleAuthService is safe on current platform without crash', () {
-    expect(() => GoogleAuthService(), returnsNormally);
+  test('SupabaseSyncService initializes safely without crash', () {
+    expect(() => SupabaseSyncService(), returnsNormally);
   });
 
   test('CifraImportService importa da URL do Supabase', () async {

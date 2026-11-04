@@ -4437,15 +4437,14 @@ class _MainScreenState extends State<MainScreen> {
                                 value: 'account',
                                 child: Row(
                                   children: [
-                                    const Icon(Icons.account_circle_outlined,
+                                    const Icon(Icons.cloud_sync_outlined,
                                         size: 18),
                                     const SizedBox(width: 10),
                                     Expanded(
                                       child: Text(
-                                        widget.account.status ==
-                                                AccountStatus.ready
-                                            ? 'Conta Google (${widget.account.email})'
-                                            : 'Conectar com Conta Google',
+                                        widget.account.syncCode != null
+                                            ? 'Sincronização Nuvem (${widget.account.syncCode})'
+                                            : 'Sincronização em Nuvem',
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),

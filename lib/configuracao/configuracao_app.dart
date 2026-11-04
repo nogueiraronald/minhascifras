@@ -5,20 +5,12 @@ class AppConfig {
   /// Nome oficial do aplicativo.
   static const String appName = 'MinhasCifras';
 
-  /// Google OAuth 2.0 Client ID padrão para Desktop (macOS, Windows, Linux).
-  static const String googleClientId =
-      '939106707928-204229furumo56sqd7lqck6aojjagejl.apps.googleusercontent.com';
+  /// URL base do projeto no Supabase
+  static const String supabaseUrl = 'https://ydwyokhftlauuzfrbjut.supabase.co';
 
-  /// Google OAuth 2.0 Client ID específico para Web / PWA (Aplicativo da Web).
-  static const String googleWebClientId =
-      '939106707928-204229furumo56sqd7lqck6aojjagejl.apps.googleusercontent.com';
-
-  /// Retorna o Client ID padrão para a plataforma
-  static String get effectiveClientId => googleClientId;
-
-  /// Google OAuth 2.0 Client Secret pareado com o Client ID acima.
-  static const String googleClientSecret =
-      'X4Z3ca8xfWDb1Voo-F9a7ZxJ';
+  /// Chave pública anônima (anon key) do Supabase para leitura e gravação
+  static const String supabaseAnonKey =
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlkd3lva2hmdGxhdXV6ZnJianV0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM4ODY1ODIsImV4cCI6MjA2OTQ2MjU4Mn0.tqX679lih7HTNvtX57CgIDbAgFymXOGcC03O82Pjy_8';
 
   /// Endpoint da Edge Function no Supabase para importar cifras por link
   static const String obterCifrasUrl =

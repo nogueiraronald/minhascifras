@@ -9,16 +9,14 @@ import '../modelos/lista_repertorio.dart';
 import '../modelos/item_lista_repertorio.dart';
 import '../modelos/musica.dart';
 import 'dados_nuvem.dart';
+import 'servico_supabase_sync.dart';
 
-/// Sincronização inteligente sem duplicidade:
+/// Sincronização inteligente sem duplicidade no Supabase:
 /// Reconcilia músicas por (Título + Artista) e Setlists por Nome.
 /// Vence a versão com updatedAt mais recente ou mescla sem gerar duplicatas.
 class SyncService extends ChangeNotifier {
-  SyncService(this._songs, this._setlists, this._account) {
-    // Sincroniza apenas nos 3 momentos especificados:
-    // 1. Ao abrir o app / conectar conta
-    // 2. Ao adicionar ou editar uma música
-    // 3. Manualmente pelo botão
+  SyncService(this._songs, this._setlists, this._account, {SupabaseSyncService? supabaseSync})
+      : _supabaseSync = supabaseSync ?? SupabaseSyncService() {
     _songs.onLocalChange = _schedule;
     _account.addListener(_onAccount);
   }
@@ -26,25 +24,26 @@ class SyncService extends ChangeNotifier {
   final SongRepository _songs;
   final SetlistRepository _setlists;
   final AccountController _account;
+  final SupabaseSyncService _supabaseSync;
+
   Timer? _debounce;
   bool _running = false;
   bool _again = false;
-  AccountStatus? _lastStatus;
+  String? _lastCode;
 
   bool syncing = false;
   String? error;
   DateTime? lastSync;
 
   void _onAccount() {
-    if (_account.status == AccountStatus.ready && _lastStatus != AccountStatus.ready) {
+    if (_account.status == AccountStatus.ready && _lastCode != _account.syncCode) {
+      _lastCode = _account.syncCode;
       sync();
     }
-    _lastStatus = _account.status;
   }
 
   void _schedule() {
     _debounce?.cancel();
-    // Resposta rápida (400ms) ao salvar/adicionar música, sem lentidão desnecessária
     _debounce = Timer(const Duration(milliseconds: 400), sync);
   }
 
@@ -74,18 +73,23 @@ class SyncService extends ChangeNotifier {
   }
 
   Future<void> _run() async {
-    final id = _account.spreadsheetId!;
-    final remote = await _account.sheets.readAll(id);
+    final code = _account.syncCode;
+    if (code == null || code.isEmpty) return;
+
+    final remote = await _supabaseSync.readAll(code);
 
     // Se a nuvem informou IDs excluídos, exclui localmente também
     for (final deletedId in remote.deletedSongIds) {
-      final existing = _songs.allSongs.where((s) => s.id == deletedId && !s.deleted).firstOrNull;
+      final existing =
+          _songs.allSongs.where((s) => s.id == deletedId && !s.deleted).firstOrNull;
       if (existing != null) {
         await _songs.remove(deletedId);
       }
     }
     for (final deletedId in remote.deletedSetlistIds) {
-      final existing = _setlists.allSetlists.where((s) => s.id == deletedId && !s.deleted).firstOrNull;
+      final existing = _setlists.allSetlists
+          .where((s) => s.id == deletedId && !s.deleted)
+          .firstOrNull;
       if (existing != null) {
         await _setlists.removeSetlist(deletedId);
       }
@@ -128,11 +132,12 @@ class SyncService extends ChangeNotifier {
       ..._setlists.allItems.where((i) => i.deleted).map((i) => i.id),
     }.toList();
 
-    if (songPush || setlistPush || itemPush) {
-      await _account.sheets.writeAll(
-        id,
+    // Sempre envia o backup na primeira sincronização ou quando houver novidades locais
+    final isFirstUpload = remote.songs.isEmpty && _songs.songs.isNotEmpty;
+    if (songPush || setlistPush || itemPush || isFirstUpload) {
+      await _supabaseSync.writeAll(
+        code,
         CloudData(
-          // Envia APENAS itens ativos: as linhas deletadas são completamente removidas
           songs: _songs.songs,
           setlists: _setlists.setlists,
           items: _setlists.items,
@@ -161,176 +166,194 @@ class SyncService extends ChangeNotifier {
     List<Song> local,
     List<String> remoteDeletedIds,
   ) {
-    String songKey(Song s) =>
-        '${s.title.trim().toLowerCase()}:::${s.artist.trim().toLowerCase()}';
-
-    final remoteById = {for (final r in remote) r.id: r};
-    final remoteByKey = {for (final r in remote) songKey(r): r};
-    final remoteDeletedSet = remoteDeletedIds.toSet();
-
-    final localById = {for (final l in local) l.id: l};
-    final localByKey = {for (final l in local) songKey(l): l};
-
     final pull = <Song>[];
     var push = false;
-    final idMap = <String, String>{}; // localId -> canonicalId
+    final songIdMap = <String, String>{};
 
-    // Compara o que existe localmente com a nuvem
+    String normKey(String title, String artist) =>
+        '${title.trim().toLowerCase()}|${artist.trim().toLowerCase()}';
+
+    final remoteByKey = <String, Song>{};
+    for (final r in remote) {
+      if (!r.deleted && !remoteDeletedIds.contains(r.id)) {
+        remoteByKey[normKey(r.title, r.artist)] = r;
+      }
+    }
+
+    final localByKey = <String, Song>{};
     for (final l in local) {
-      final key = songKey(l);
-      final r = remoteById[l.id] ?? remoteByKey[key];
+      localByKey[normKey(l.title, l.artist)] = l;
+    }
 
-      if (r != null) {
-        idMap[l.id] = r.id;
-        if (l.deleted) {
-          // Excluída localmente: remove da nuvem se r ainda não constava como deletada
-          if (!r.deleted) push = true;
-        } else if (r.updatedAt.isAfter(l.updatedAt)) {
-          pull.add(r);
-        } else if (l.updatedAt.isAfter(r.updatedAt) || l.content != r.content) {
+    // Compara músicas locais com as da nuvem
+    for (final l in local) {
+      final key = normKey(l.title, l.artist);
+      final r = remoteByKey[key];
+
+      if (r == null) {
+        // Se a música local não está marcada como deletada, envia para a nuvem
+        if (!l.deleted) {
           push = true;
         }
       } else {
-        // Música nova local que ainda não existe na nuvem
+        // Mesma música encontrada na nuvem: mapeia os IDs para vincular setlists
+        songIdMap[l.id] = r.id;
+
         if (l.deleted) {
-          if (!remoteDeletedSet.contains(l.id)) push = true;
-        } else {
+          // Excluída localmente: dispara push para remover da nuvem
           push = true;
+        } else {
+          // Ambas existem: vence a que foi editada mais recentemente
+          if (r.updatedAt.isAfter(l.updatedAt)) {
+            pull.add(Song(
+              id: l.id,
+              title: r.title,
+              artist: r.artist,
+              content: r.content,
+              originalKey: r.originalKey,
+              isFavorite: r.isFavorite,
+              tags: r.tags,
+              audioUrl: r.audioUrl,
+              audioDurationSeconds: r.audioDurationSeconds,
+              updatedAt: r.updatedAt,
+              deleted: r.deleted,
+            ));
+          } else if (l.updatedAt.isAfter(r.updatedAt)) {
+            push = true;
+          }
         }
       }
     }
 
-    // Identifica músicas na nuvem que não existem localmente
+    // Músicas que estão na nuvem mas NÃO estão no dispositivo local
     for (final r in remote) {
-      final key = songKey(r);
-      final l = localById[r.id] ?? localByKey[key];
-      if (l == null) {
+      if (r.deleted || remoteDeletedIds.contains(r.id)) continue;
+      final key = normKey(r.title, r.artist);
+      if (!localByKey.containsKey(key)) {
         pull.add(r);
-      } else if (l.deleted) {
-        // Localmente foi deletada, garante que seja removida da nuvem
-        push = true;
       }
     }
 
-    return (pull, push, idMap);
+    return (pull, push, songIdMap);
   }
 
-  /// Mescla setlists locais e da nuvem sem gerar duplicidade de nomes.
+  /// Mescla setlists sem duplicar nomes idênticos
   static (List<Setlist> pull, bool push, Map<String, String> setlistIdMap)
       _deduplicateAndMergeSetlists(
     List<Setlist> remote,
     List<Setlist> local,
     List<String> remoteDeletedIds,
   ) {
-    String setlistKey(Setlist s) => s.name.trim().toLowerCase();
-
-    final remoteById = {for (final r in remote) r.id: r};
-    final remoteByKey = {for (final r in remote) setlistKey(r): r};
-    final remoteDeletedSet = remoteDeletedIds.toSet();
-
-    final localById = {for (final l in local) l.id: l};
-    final localByKey = {for (final l in local) setlistKey(l): l};
-
     final pull = <Setlist>[];
     var push = false;
-    final idMap = <String, String>{};
+    final setlistIdMap = <String, String>{};
+
+    String normKey(String name) => name.trim().toLowerCase();
+
+    final remoteByKey = <String, Setlist>{};
+    for (final r in remote) {
+      if (!r.deleted && !remoteDeletedIds.contains(r.id)) {
+        remoteByKey[normKey(r.name)] = r;
+      }
+    }
+
+    final localByKey = <String, Setlist>{};
+    for (final l in local) {
+      localByKey[normKey(l.name)] = l;
+    }
 
     for (final l in local) {
-      final key = setlistKey(l);
-      final r = remoteById[l.id] ?? remoteByKey[key];
+      final key = normKey(l.name);
+      final r = remoteByKey[key];
 
-      if (r != null) {
-        idMap[l.id] = r.id;
-        if (l.deleted) {
-          push = true;
-        } else if (r.updatedAt.isAfter(l.updatedAt)) {
-          pull.add(r);
-        } else if (l.updatedAt.isAfter(r.updatedAt) || l.id != r.id) {
-          push = true;
-        }
+      if (r == null) {
+        if (!l.deleted) push = true;
       } else {
+        setlistIdMap[l.id] = r.id;
         if (l.deleted) {
-          if (!remoteDeletedSet.contains(l.id)) push = true;
+          push = true;
         } else {
-          if (!remoteDeletedSet.contains(l.id)) push = true;
+          if (r.updatedAt.isAfter(l.updatedAt)) {
+            pull.add(Setlist(
+              id: l.id,
+              name: r.name,
+              notes: r.notes,
+              updatedAt: r.updatedAt,
+              deleted: r.deleted,
+            ));
+          } else if (l.updatedAt.isAfter(r.updatedAt)) {
+            push = true;
+          }
         }
       }
     }
 
     for (final r in remote) {
-      final key = setlistKey(r);
-      final l = localById[r.id] ?? localByKey[key];
-      if (l == null) {
+      if (r.deleted || remoteDeletedIds.contains(r.id)) continue;
+      final key = normKey(r.name);
+      if (!localByKey.containsKey(key)) {
         pull.add(r);
-      } else if (l.deleted) {
-        push = true;
       }
     }
 
-    return (pull, push, idMap);
+    return (pull, push, setlistIdMap);
   }
 
-  /// Mescla itens de setlist garantindo que a mesma música não apareça duplicada na mesma setlist
+  /// Mescla itens de setlist
   static (List<SetlistItem> pull, bool push) _deduplicateAndMergeItems(
     List<SetlistItem> remote,
     List<SetlistItem> local,
-    Map<String, String> songIdMap,
-    Map<String, String> setlistIdMap,
+    Map<String, String> localToRemoteSongIdMap,
+    Map<String, String> localToRemoteSetlistIdMap,
     List<String> remoteDeletedIds,
   ) {
-    String itemKey(String setlistId, String songId) => '$setlistId:::$songId';
-
-    final remoteById = {for (final r in remote) r.id: r};
-    final remoteByKey = {for (final r in remote) itemKey(r.setlistId, r.songId): r};
-    final remoteDeletedSet = remoteDeletedIds.toSet();
-
     final pull = <SetlistItem>[];
     var push = false;
 
-    for (final l in local) {
-      final targetSetlistId = setlistIdMap[l.setlistId] ?? l.setlistId;
-      final targetSongId = songIdMap[l.songId] ?? l.songId;
-      final key = itemKey(targetSetlistId, targetSongId);
+    String itemKey(String setlistId, String songId, int pos) =>
+        '$setlistId|$songId|$pos';
 
-      final r = remoteById[l.id] ?? remoteByKey[key];
-      if (r != null) {
+    final remoteItems = <String, SetlistItem>{};
+    for (final r in remote) {
+      if (!r.deleted && !remoteDeletedIds.contains(r.id)) {
+        remoteItems[itemKey(r.setlistId, r.songId, r.position)] = r;
+      }
+    }
+
+    final localItems = <String, SetlistItem>{};
+    for (final l in local) {
+      final remSetlistId = localToRemoteSetlistIdMap[l.setlistId] ?? l.setlistId;
+      final remSongId = localToRemoteSongIdMap[l.songId] ?? l.songId;
+      localItems[itemKey(remSetlistId, remSongId, l.position)] = l;
+    }
+
+    for (final l in local) {
+      final remSetlistId = localToRemoteSetlistIdMap[l.setlistId] ?? l.setlistId;
+      final remSongId = localToRemoteSongIdMap[l.songId] ?? l.songId;
+      final key = itemKey(remSetlistId, remSongId, l.position);
+
+      final r = remoteItems[key];
+      if (r == null) {
+        if (!l.deleted) push = true;
+      } else {
         if (l.deleted) {
           push = true;
         } else if (r.updatedAt.isAfter(l.updatedAt)) {
-          pull.add(r);
+          pull.add(r.copyWith(position: l.position));
         } else if (l.updatedAt.isAfter(r.updatedAt)) {
           push = true;
-        }
-      } else {
-        if (l.deleted) {
-          if (!remoteDeletedSet.contains(l.id)) push = true;
-        } else {
-          if (!remoteDeletedSet.contains(l.id)) push = true;
         }
       }
     }
 
     for (final r in remote) {
-      final l = local.where((it) {
-        final targetSetlistId = setlistIdMap[it.setlistId] ?? it.setlistId;
-        final targetSongId = songIdMap[it.songId] ?? it.songId;
-        return r.id == it.id || (r.setlistId == targetSetlistId && r.songId == targetSongId);
-      }).firstOrNull;
-
-      if (l == null) {
+      if (r.deleted || remoteDeletedIds.contains(r.id)) continue;
+      final key = itemKey(r.setlistId, r.songId, r.position);
+      if (!localItems.containsKey(key)) {
         pull.add(r);
-      } else if (l.deleted) {
-        push = true;
       }
     }
 
     return (pull, push);
-  }
-
-  @override
-  void dispose() {
-    _debounce?.cancel();
-    _account.removeListener(_onAccount);
-    super.dispose();
   }
 }
