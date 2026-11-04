@@ -117,6 +117,7 @@ class Song {
   }
 
   Song copyWith({
+    String? id,
     String? title,
     String? artist,
     String? content,
@@ -125,10 +126,11 @@ class Song {
     List<String>? tags,
     String? audioUrl,
     int? audioDurationSeconds,
+    DateTime? updatedAt,
     bool? deleted,
   }) {
     return Song(
-      id: id,
+      id: id ?? this.id,
       title: title ?? this.title,
       artist: artist ?? this.artist,
       content: content ?? this.content,
@@ -137,7 +139,7 @@ class Song {
       tags: tags ?? this.tags,
       audioUrl: audioUrl ?? this.audioUrl,
       audioDurationSeconds: audioDurationSeconds ?? this.audioDurationSeconds,
-      updatedAt: DateTime.now(),
+      updatedAt: updatedAt ?? DateTime.now(),
       deleted: deleted ?? this.deleted,
     );
   }

@@ -15,6 +15,7 @@ import '../servicos/transpositor_acordes.dart';
 import '../servicos/servico_importacao_cifra.dart';
 import '../componentes/dialogo_importar_link.dart';
 import '../componentes/estilo_app.dart';
+import '../servicos/recarregador_pagina.dart';
 
 class SongEditScreen extends StatefulWidget {
   const SongEditScreen({
@@ -355,13 +356,36 @@ class _SongEditScreenState extends State<SongEditScreen> {
     await widget.repository.saveAll(songs);
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${songs.length} cifra(s) importada(s) para a biblioteca!'),
-        backgroundColor: const Color(0xFF10B981),
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.check_circle, color: Color(0xFF10B981)),
+            SizedBox(width: 8),
+            Text('Importação Concluída'),
+          ],
+        ),
+        content: Text(
+          '${songs.length} cifra(s) foram incluídas com sucesso na sua biblioteca!',
+          style: const TextStyle(fontSize: 15),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK'),
+          ),
+        ],
       ),
     );
-    Navigator.pop(context);
+
+    if (mounted) {
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      if (kIsWeb) {
+        reloadWebPage();
+      }
+    }
   }
 
   Future<void> _save() async {
@@ -413,6 +437,9 @@ class _SongEditScreenState extends State<SongEditScreen> {
       ),
     );
     Navigator.pop(context, song);
+    if (kIsWeb) {
+      reloadWebPage();
+    }
   }
 
   @override

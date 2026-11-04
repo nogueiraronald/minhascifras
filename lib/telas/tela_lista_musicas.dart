@@ -1,4 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
+import '../servicos/recarregador_pagina.dart';
 
 import '../dados/controlador_conta.dart';
 import '../dados/biblioteca_acordes.dart';
@@ -78,9 +81,36 @@ class SongListScreen extends StatelessWidget {
 
     await repository.saveAll(songs);
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${songs.length} cifra(s) importada(s) com sucesso!')),
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.check_circle, color: Color(0xFF10B981)),
+              SizedBox(width: 8),
+              Text('Importação Concluída'),
+            ],
+          ),
+          content: Text(
+            '${songs.length} cifra(s) foram incluídas com sucesso na sua biblioteca!',
+            style: const TextStyle(fontSize: 15),
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
       );
+
+      if (context.mounted) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        if (kIsWeb) {
+          reloadWebPage();
+        }
+      }
     }
   }
 

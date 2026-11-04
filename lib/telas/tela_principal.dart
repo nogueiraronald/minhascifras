@@ -4189,6 +4189,13 @@ class _MainScreenState extends State<MainScreen> {
                                           await widget.setlists
                                               .removeItemsForSong(song.id);
                                           _ensureFirstSongSelected();
+                                          try {
+                                            await widget.sync.sync();
+                                          } catch (_) {}
+                                          if (kIsWeb) {
+                                            reloadWebPage();
+                                            return;
+                                          }
                                           if (mounted) {
                                             ScaffoldMessenger.of(this.context)
                                                 .showSnackBar(

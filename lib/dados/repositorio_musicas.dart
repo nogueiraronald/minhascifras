@@ -44,11 +44,18 @@ class SongRepository extends ChangeNotifier {
     return list;
   }
 
+  /// Normaliza chave de identificação única por título e artista
+  static String normKey(String title, String artist) {
+    return '${title.trim().toLowerCase()}_${artist.trim().toLowerCase()}';
+  }
+
   Future<void> save(Song song) async {
     final cleanSong = song.copyWith(content: ChordTransposer.cleanText(song.content));
-    final i = _songs.indexWhere((s) => s.id == cleanSong.id);
+    final key = normKey(cleanSong.title, cleanSong.artist);
+    final i = _songs.indexWhere((s) =>
+        s.id == cleanSong.id || (!s.deleted && normKey(s.title, s.artist) == key));
     if (i >= 0) {
-      _songs[i] = cleanSong;
+      _songs[i] = cleanSong.copyWith(id: _songs[i].id, deleted: false);
     } else {
       _songs.add(cleanSong);
     }
@@ -59,9 +66,11 @@ class SongRepository extends ChangeNotifier {
   Future<void> saveAll(List<Song> songs) async {
     for (final song in songs) {
       final cleanSong = song.copyWith(content: ChordTransposer.cleanText(song.content));
-      final i = _songs.indexWhere((s) => s.id == cleanSong.id);
+      final key = normKey(cleanSong.title, cleanSong.artist);
+      final i = _songs.indexWhere((s) =>
+          s.id == cleanSong.id || (!s.deleted && normKey(s.title, s.artist) == key));
       if (i >= 0) {
-        _songs[i] = cleanSong;
+        _songs[i] = cleanSong.copyWith(id: _songs[i].id, deleted: false);
       } else {
         _songs.add(cleanSong);
       }

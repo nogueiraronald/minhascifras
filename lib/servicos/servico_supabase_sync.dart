@@ -49,6 +49,9 @@ class SupabaseSyncService {
     final deletedSongIds = ((dados['deletedSongIds'] as List?) ?? [])
         .map((e) => e.toString())
         .toList();
+    final deletedSongKeys = ((dados['deletedSongKeys'] as List?) ?? [])
+        .map((e) => e.toString())
+        .toList();
     final deletedSetlistIds = ((dados['deletedSetlistIds'] as List?) ?? [])
         .map((e) => e.toString())
         .toList();
@@ -72,6 +75,7 @@ class SupabaseSyncService {
           .map((j) => SetlistItem.fromJson(j))
           .toList(),
       deletedSongIds: deletedSongIds,
+      deletedSongKeys: deletedSongKeys,
       deletedSetlistIds: deletedSetlistIds,
       deletedItemIds: deletedItemIds,
       passwordHash: passwordHash,
@@ -113,6 +117,7 @@ class SupabaseSyncService {
       'setlists': data.setlists.map((s) => s.toJson()).toList(),
       'items': data.items.map((i) => i.toJson()).toList(),
       'deletedSongIds': data.deletedSongIds,
+      'deletedSongKeys': data.deletedSongKeys,
       'deletedSetlistIds': data.deletedSetlistIds,
       'deletedItemIds': data.deletedItemIds,
     };

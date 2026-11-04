@@ -1,4 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
+import '../servicos/recarregador_pagina.dart';
 
 import '../dados/controlador_conta.dart';
 import '../servicos/servico_sincronizacao.dart';
@@ -66,9 +69,12 @@ class SyncButton extends StatelessWidget {
                   SnackBar(
                     content: const Text('✓ Sincronizado com a Nuvem com sucesso!'),
                     backgroundColor: Colors.green[700],
-                    duration: const Duration(seconds: 3),
+                    duration: const Duration(seconds: 2),
                   ),
                 );
+                if (kIsWeb) {
+                  reloadWebPage();
+                }
               }
             }
           },

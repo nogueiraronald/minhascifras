@@ -90,12 +90,23 @@ class SyncService extends ChangeNotifier {
       }
     }
 
-    // Se a nuvem informou IDs excluídos, exclui localmente também
+    // Se a nuvem informou IDs ou Chaves excluídas, exclui localmente também
     for (final deletedId in remote.deletedSongIds) {
       final existing =
           _songs.allSongs.where((s) => s.id == deletedId && !s.deleted).firstOrNull;
       if (existing != null) {
         await _songs.remove(deletedId);
+      }
+    }
+    for (final deletedKey in remote.deletedSongKeys) {
+      final existing = _songs.allSongs
+          .where((s) =>
+              !s.deleted &&
+              '${s.title.trim().toLowerCase()}|${s.artist.trim().toLowerCase()}' ==
+                  deletedKey)
+          .firstOrNull;
+      if (existing != null) {
+        await _songs.remove(existing.id);
       }
     }
     for (final deletedId in remote.deletedSetlistIds) {
@@ -109,7 +120,12 @@ class SyncService extends ChangeNotifier {
 
     // 1. Reconciliação e desduplicação de músicas por (Título + Artista)
     final (songPull, songPush, localToRemoteSongIdMap) =
-        _deduplicateAndMergeSongs(remote.songs, _songs.allSongs, remote.deletedSongIds);
+        _deduplicateAndMergeSongs(
+      remote.songs,
+      _songs.allSongs,
+      remote.deletedSongIds,
+      remote.deletedSongKeys,
+    );
 
     // 2. Reconciliação e desduplicação de setlists por Nome
     final (setlistPull, setlistPush, localToRemoteSetlistIdMap) =
@@ -134,6 +150,14 @@ class SyncService extends ChangeNotifier {
       ..._songs.allSongs.where((s) => s.deleted).map((s) => s.id),
     }.toList();
 
+    final allDeletedSongKeys = {
+      ...remote.deletedSongKeys,
+      ..._songs.allSongs
+          .where((s) => s.deleted)
+          .map((s) =>
+              '${s.title.trim().toLowerCase()}|${s.artist.trim().toLowerCase()}'),
+    }.toList();
+
     final allDeletedSetlistIds = {
       ...remote.deletedSetlistIds,
       ..._setlists.allSetlists.where((s) => s.deleted).map((s) => s.id),
@@ -155,6 +179,7 @@ class SyncService extends ChangeNotifier {
           setlists: _setlists.setlists,
           items: _setlists.items,
           deletedSongIds: allDeletedSongIds,
+          deletedSongKeys: allDeletedSongKeys,
           deletedSetlistIds: allDeletedSetlistIds,
           deletedItemIds: allDeletedItemIds,
           passwordHash: _account.passwordHash,
@@ -168,9 +193,10 @@ class SyncService extends ChangeNotifier {
       deduplicateAndMergeSongsForTesting(
     List<Song> remote,
     List<Song> local,
-    List<String> remoteDeletedIds,
-  ) =>
-      _deduplicateAndMergeSongs(remote, local, remoteDeletedIds);
+    List<String> remoteDeletedIds, [
+    List<String> remoteDeletedKeys = const [],
+  ]) =>
+      _deduplicateAndMergeSongs(remote, local, remoteDeletedIds, remoteDeletedKeys);
 
   /// Mescla músicas locais e da nuvem sem gerar duplicidade.
   /// Identifica músicas equivalentes pelo mesmo Título e Artista (case-insensitive).
@@ -178,8 +204,9 @@ class SyncService extends ChangeNotifier {
       _deduplicateAndMergeSongs(
     List<Song> remote,
     List<Song> local,
-    List<String> remoteDeletedIds,
-  ) {
+    List<String> remoteDeletedIds, [
+    List<String> remoteDeletedKeys = const [],
+  ]) {
     final pull = <Song>[];
     var push = false;
     final songIdMap = <String, String>{};
@@ -187,10 +214,14 @@ class SyncService extends ChangeNotifier {
     String normKey(String title, String artist) =>
         '${title.trim().toLowerCase()}|${artist.trim().toLowerCase()}';
 
+    final deletedKeySet = remoteDeletedKeys.toSet();
+    final deletedIdSet = remoteDeletedIds.toSet();
+
     final remoteByKey = <String, Song>{};
     for (final r in remote) {
-      if (!r.deleted && !remoteDeletedIds.contains(r.id)) {
-        remoteByKey[normKey(r.title, r.artist)] = r;
+      final key = normKey(r.title, r.artist);
+      if (!r.deleted && !deletedIdSet.contains(r.id) && !deletedKeySet.contains(key)) {
+        remoteByKey[key] = r;
       }
     }
 
@@ -203,6 +234,11 @@ class SyncService extends ChangeNotifier {
     for (final l in local) {
       final key = normKey(l.title, l.artist);
       final r = remoteByKey[key];
+
+      // Se a música foi excluída na nuvem (por chave ou ID), não re-envia
+      if (deletedKeySet.contains(key) || deletedIdSet.contains(l.id)) {
+        continue;
+      }
 
       if (r == null) {
         // Se a música local não está marcada como deletada, envia para a nuvem
