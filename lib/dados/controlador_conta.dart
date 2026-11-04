@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../servicos/servico_supabase_sync.dart';
 
-enum AccountStatus { signedOut, working, ready, error }
+enum AccountStatus { signedOut, working, ready, error, locked }
 
 /// Controlador do código de sincronização do Supabase para backup sem conta/senha.
 class AccountController extends ChangeNotifier {
@@ -22,10 +22,17 @@ class AccountController extends ChangeNotifier {
   AccountStatus status = AccountStatus.ready;
   String? syncCode;
   String? passwordHash;
+  String? pendingSyncCode;
+  String? pendingPasswordHash;
   String? error;
 
   bool get isPasswordProtected =>
       passwordHash != null && passwordHash!.isNotEmpty;
+
+  bool get isLocked => status == AccountStatus.locked;
+  bool get hasPendingSync =>
+      pendingSyncCode != null && pendingSyncCode!.isNotEmpty;
+
 
   /// Retorna a URL completa para pareamento instantâneo via QR Code
   String get syncUrl {
@@ -88,12 +95,38 @@ class AccountController extends ChangeNotifier {
         if (rawSync != null) {
           final querySync = extractCode(rawSync);
           if (querySync.isNotEmpty) {
-            await _prefs.setString(_kSyncCode, querySync);
-            syncCode = querySync;
-            status = AccountStatus.ready;
-            error = null;
-            notifyListeners();
-            return;
+            final remoteHash = await checkRemotePassword(querySync);
+            final savedCode = _prefs.getString(_kSyncCode);
+            final savedHash = _prefs.getString(_kSyncPasswordHash);
+
+            if (remoteHash != null && remoteHash.isNotEmpty) {
+              if (savedCode == querySync && savedHash == remoteHash) {
+                // Já autenticado anteriormente com sucesso neste aparelho
+                syncCode = querySync;
+                passwordHash = savedHash;
+                status = AccountStatus.ready;
+                error = null;
+                notifyListeners();
+                return;
+              } else {
+                // Exige validação de senha antes de sincronizar ou baixar músicas!
+                pendingSyncCode = querySync;
+                pendingPasswordHash = remoteHash;
+                status = AccountStatus.locked;
+                error = 'Repertório protegido por senha.';
+                notifyListeners();
+                return;
+              }
+            } else {
+              // Sem senha configurada na nuvem
+              await _prefs.setString(_kSyncCode, querySync);
+              syncCode = querySync;
+              passwordHash = null;
+              status = AccountStatus.ready;
+              error = null;
+              notifyListeners();
+              return;
+            }
           }
         }
       }
@@ -111,6 +144,55 @@ class AccountController extends ChangeNotifier {
       status = AccountStatus.error;
     }
     notifyListeners();
+  }
+
+  /// Desbloqueia o repertório pendente com a senha correta digitada pelo usuário
+  Future<bool> unlockPendingSync(String password) async {
+    if (pendingSyncCode == null || pendingPasswordHash == null) return false;
+    final clean = password.trim();
+    final typedHash = sha256.convert(utf8.encode(clean)).toString();
+    if (typedHash != pendingPasswordHash) {
+      return false;
+    }
+
+    final code = pendingSyncCode!;
+    await _prefs.setString(_kSyncCode, code);
+    await _prefs.setString(_kSyncPasswordHash, typedHash);
+    syncCode = code;
+    passwordHash = typedHash;
+    pendingSyncCode = null;
+    pendingPasswordHash = null;
+    status = AccountStatus.ready;
+    error = null;
+    notifyListeners();
+    return true;
+  }
+
+  /// Cancela o pareamento pendente e mantém o código local
+  void cancelPendingSync() {
+    pendingSyncCode = null;
+    pendingPasswordHash = null;
+    var saved = _prefs.getString(_kSyncCode);
+    if (saved == null || saved.trim().isEmpty) {
+      saved = _generateCode();
+      _prefs.setString(_kSyncCode, saved);
+    }
+    syncCode = saved;
+    passwordHash = _prefs.getString(_kSyncPasswordHash);
+    status = AccountStatus.ready;
+    error = null;
+    notifyListeners();
+  }
+
+  /// Trava a conta localmente caso a nuvem detecte exigência de senha
+  void lockWithRemoteHash(String remoteHash) {
+    if (syncCode != null && syncCode!.isNotEmpty) {
+      pendingSyncCode = syncCode;
+      pendingPasswordHash = remoteHash;
+      status = AccountStatus.locked;
+      error = 'Repertório protegido por senha.';
+      notifyListeners();
+    }
   }
 
   /// Verifica se um código remoto na nuvem possui senha de proteção configurada

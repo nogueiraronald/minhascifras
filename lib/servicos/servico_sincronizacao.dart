@@ -78,6 +78,18 @@ class SyncService extends ChangeNotifier {
 
     final remote = await _supabaseSync.readAll(code);
 
+    // SEGURANÇA CRÍTICA: Se o repertório na nuvem tem senha configurada,
+    // o cliente local DEVE possuir o mesmo hash de senha para ter acesso aos dados.
+    if (remote.passwordHash != null && remote.passwordHash!.isNotEmpty) {
+      if (_account.passwordHash != remote.passwordHash) {
+        _account.lockWithRemoteHash(remote.passwordHash!);
+        error =
+            'Este repertório está protegido por senha. Informe a senha para sincronizar.';
+        notifyListeners();
+        return;
+      }
+    }
+
     // Se a nuvem informou IDs excluídos, exclui localmente também
     for (final deletedId in remote.deletedSongIds) {
       final existing =

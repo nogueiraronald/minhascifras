@@ -11,6 +11,7 @@ import '../dados/repositorio_listas.dart';
 import '../dados/repositorio_musicas.dart';
 import '../servicos/servico_pdf_recuperacao.dart';
 import '../servicos/servico_sincronizacao.dart';
+import 'dialogo_desbloqueio_conta.dart';
 import 'estilo_app.dart';
 
 /// Diálogo moderno de Sincronização em Nuvem com QR Code, proteção por senha opcional,
@@ -572,6 +573,55 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
             ),
           ],
         ),
+        if (widget.account.isLocked) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.amber.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.lock_rounded, color: Colors.amber, size: 22),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Repertório Bloqueado',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.amber,
+                        ),
+                      ),
+                      Text(
+                        'Informe a senha para autorizar o acesso e sincronizar.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isDark ? Colors.grey[300] : Colors.grey[700],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    if (widget.sync != null) {
+                      DialogoDesbloqueioConta.show(
+                          context, widget.account, widget.sync!);
+                    }
+                  },
+                  child: const Text('Desbloquear'),
+                ),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: 14),
 
         // QR CODE em destaque com fundo branco e contraste nítido

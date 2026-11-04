@@ -4,12 +4,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:cifras_app/componentes/dialogo_desbloqueio_conta.dart';
 import 'package:cifras_app/componentes/dialogo_login_desktop.dart';
 import 'package:cifras_app/dados/controlador_conta.dart';
 import 'package:cifras_app/dados/repositorio_listas.dart';
 import 'package:cifras_app/dados/repositorio_musicas.dart';
 import 'package:cifras_app/modelos/lista_repertorio.dart';
 import 'package:cifras_app/modelos/musica.dart';
+import 'package:cifras_app/servicos/dados_nuvem.dart';
+import 'package:cifras_app/servicos/servico_sincronizacao.dart';
+import 'package:cifras_app/servicos/servico_supabase_sync.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -184,4 +188,141 @@ void main() {
       expect(account.syncCode, startsWith('MC-'));
     });
   });
+
+  group('Proteção Estrita por Senha no SyncService e Desbloqueio', () {
+    late SongRepository songRepo;
+    late SetlistRepository setlistRepo;
+    late AccountController account;
+    late FakeSupabaseSync fakeSupabase;
+    late SyncService syncService;
+
+    const correctPassword = 'senha-mestra-123';
+    final passwordHash =
+        sha256.convert(utf8.encode(correctPassword)).toString();
+
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({
+        'supabase_sync_code': 'MC-PROTEGIDO',
+      });
+      songRepo = await SongRepository.open();
+      setlistRepo = await SetlistRepository.open();
+      account = await AccountController.open();
+
+      fakeSupabase = FakeSupabaseSync(
+        remoteData: CloudData(
+          songs: [
+            Song(
+              id: 'remota1',
+              title: 'Música Secreta',
+              artist: 'Artista Protegido',
+              content: 'C G Am F',
+            ),
+          ],
+          passwordHash: passwordHash,
+        ),
+      );
+
+      syncService = SyncService(
+        songRepo,
+        setlistRepo,
+        account,
+        supabaseSync: fakeSupabase,
+      );
+    });
+
+    test('SyncService bloqueia download quando aparelho não possui a senha',
+        () async {
+      expect(account.isPasswordProtected, isFalse);
+      expect(songRepo.songs, isEmpty);
+
+      // Tenta sincronizar sem ter a senha
+      await syncService.sync();
+
+      // Músicas NÃO devem ter sido baixadas
+      expect(songRepo.songs, isEmpty);
+      expect(account.isLocked, isTrue);
+      expect(syncService.error, contains('protegido por senha'));
+    });
+
+    test('unlockPendingSync desbloqueia com senha correta e rejeita incorreta',
+        () async {
+      account.lockWithRemoteHash(passwordHash);
+      expect(account.isLocked, isTrue);
+
+      // Senha incorreta
+      final wrongResult = await account.unlockPendingSync('senha-errada');
+      expect(wrongResult, isFalse);
+      expect(account.isLocked, isTrue);
+
+      // Senha correta
+      final okResult = await account.unlockPendingSync(correctPassword);
+      expect(okResult, isTrue);
+      expect(account.isLocked, isFalse);
+      expect(account.isPasswordProtected, isTrue);
+
+      // Agora o sync baixa as músicas normalmente
+      await syncService.sync();
+      expect(songRepo.songs.length, 1);
+      expect(songRepo.songs.first.title, 'Música Secreta');
+    });
+
+    testWidgets('DialogoDesbloqueioConta permite digitar senha e desbloquear',
+        (tester) async {
+      account.lockWithRemoteHash(passwordHash);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (ctx) => ElevatedButton(
+                onPressed: () => DialogoDesbloqueioConta.show(
+                    ctx, account, syncService),
+                child: const Text('Abrir Desbloqueio'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Abrir Desbloqueio'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Repertório Protegido por Senha'), findsOneWidget);
+      expect(find.text('Desbloquear e Baixar'), findsOneWidget);
+
+      // Digita senha errada
+      await tester.enterText(find.byType(TextField), 'errada');
+      await tester.tap(find.text('Desbloquear e Baixar'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Senha incorreta'), findsOneWidget);
+      expect(account.isLocked, isTrue);
+
+      // Digita senha certa
+      await tester.enterText(find.byType(TextField), correctPassword);
+      await tester.tap(find.text('Desbloquear e Baixar'));
+      await tester.pumpAndSettle();
+
+      expect(account.isLocked, isFalse);
+      expect(songRepo.songs.length, 1);
+    });
+  });
 }
+
+class FakeSupabaseSync extends SupabaseSyncService {
+  FakeSupabaseSync({this.remoteData = const CloudData()});
+  CloudData remoteData;
+
+  @override
+  Future<CloudData> readAll(String syncCode) async => remoteData;
+
+  @override
+  Future<void> writeAll(String syncCode, CloudData data) async {
+    remoteData = data;
+  }
+
+  @override
+  Future<String?> checkPasswordHash(String syncCode) async =>
+      remoteData.passwordHash;
+}
+

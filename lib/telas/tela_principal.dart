@@ -25,6 +25,7 @@ import '../componentes/botao_sincronizacao.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../componentes/dialogo_login_desktop.dart';
+import '../componentes/dialogo_desbloqueio_conta.dart';
 import '../componentes/visualizador_letra.dart';
 import '../componentes/visualizador_partitura.dart';
 import 'tela_edicao_cifra.dart';
@@ -140,10 +141,23 @@ class _MainScreenState extends State<MainScreen> {
   int _navDirection = 1;
   double _horizontalDragDistance = 0;
 
+  bool _isUnlockDialogShowing = false;
+
+  void _checkAccountLock() {
+    if (widget.account.isLocked && mounted && !_isUnlockDialogShowing) {
+      _isUnlockDialogShowing = true;
+      DialogoDesbloqueioConta.show(context, widget.account, widget.sync)
+          .then((_) {
+        _isUnlockDialogShowing = false;
+      });
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     _loadUserPreferences();
+    widget.account.addListener(_checkAccountLock);
     _searchController.addListener(() {
       setState(() {
         _searchQuery = _searchController.text.trim().toLowerCase();
@@ -165,11 +179,13 @@ class _MainScreenState extends State<MainScreen> {
       final activeSongIds = widget.repository.songs.map((s) => s.id);
       widget.setlists.cleanupOrphanedItems(activeSongIds);
       _ensureFirstSongSelected();
+      _checkAccountLock();
     });
   }
 
   @override
   void dispose() {
+    widget.account.removeListener(_checkAccountLock);
     _karaokeController?.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();

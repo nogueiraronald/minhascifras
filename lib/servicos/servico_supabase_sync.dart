@@ -118,6 +118,8 @@ class SupabaseSyncService {
     };
     if (data.passwordHash != null && data.passwordHash!.isNotEmpty) {
       dadosMap['senha_hash'] = data.passwordHash;
+    } else {
+      dadosMap['senha_hash'] = null;
     }
 
     final payload = {

@@ -48,6 +48,21 @@ class AccountButton extends StatelessWidget {
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
             );
+          case AccountStatus.locked:
+            const tooltipLocked = 'Repertório Bloqueado por Senha';
+            if (compact) {
+              return IconButton(
+                tooltip: tooltipLocked,
+                icon: const Icon(Icons.lock_rounded, color: Colors.amber),
+                onPressed: () => _openDialog(context),
+              );
+            }
+            return TextButton.icon(
+              onPressed: () => _openDialog(context),
+              icon: const Icon(Icons.lock_rounded, color: Colors.amber),
+              label: const Text('Bloqueado',
+                  style: TextStyle(color: Colors.amber, fontSize: 13)),
+            );
           case AccountStatus.signedOut:
           case AccountStatus.ready:
           case AccountStatus.error:
