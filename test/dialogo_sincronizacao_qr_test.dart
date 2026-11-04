@@ -111,5 +111,34 @@ void main() {
       expect(find.byType(QrImageView), findsOneWidget);
       expect(find.byType(TextField), findsNothing);
     });
+
+    testWidgets('exibe tela de e-mail e senha diretamente por padrão ao abrir',
+        (tester) async {
+      tester.view.physicalSize = const Size(375, 667);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DesktopLoginDialog(account: account),
+          ),
+        ),
+      );
+
+      // Deve exibir os campos de E-mail e Senha imediatamente
+      expect(find.text('Acessar com E-mail'), findsOneWidget);
+      expect(find.text('Seu E-mail'), findsOneWidget);
+      expect(find.text('Sua Senha de Acesso'), findsOneWidget);
+      expect(find.text('Acessar e Baixar Músicas'), findsOneWidget);
+      expect(find.byType(QrImageView), findsNothing);
+
+      // Deve permitir alternar para o QR Code pelo botão de voltar
+      await tester.tap(find.text('← Voltar para o QR Code'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(QrImageView), findsOneWidget);
+      expect(find.text('Acessar com E-mail e Senha (Recomendado)'), findsOneWidget);
+    });
   });
 }
