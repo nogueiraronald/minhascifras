@@ -11,6 +11,7 @@ class CloudData {
     this.deletedSongIds = const [],
     this.deletedSetlistIds = const [],
     this.deletedItemIds = const [],
+    this.passwordHash,
   });
 
   final List<Song> songs;
@@ -19,4 +20,5 @@ class CloudData {
   final List<String> deletedSongIds;
   final List<String> deletedSetlistIds;
   final List<String> deletedItemIds;
+  final String? passwordHash;
 }

@@ -84,7 +84,10 @@ void main() {
       );
 
       // Clica no botão de digitação manual
-      await tester.tap(find.text('Não pode usar a câmera? Digitar chave'));
+      final manualFinder = find.text('Não pode usar a câmera? Digitar chave');
+      await tester.ensureVisible(manualFinder);
+      await tester.pumpAndSettle();
+      await tester.tap(manualFinder);
       await tester.pumpAndSettle();
 
       // Agora NÃO deve exibir o QR Code para economizar espaço de tela

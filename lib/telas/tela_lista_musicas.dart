@@ -133,7 +133,12 @@ class SongListScreen extends StatelessWidget {
         title: const Text('Minhas cifras'),
         actions: [
           SyncButton(sync: sync, account: account),
-          AccountButton(account: account),
+          AccountButton(
+            account: account,
+            songs: repository,
+            setlists: setlists,
+            sync: sync,
+          ),
           IconButton(
             tooltip: 'Importar por link',
             icon: const Icon(Icons.link),

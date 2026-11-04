@@ -1,11 +1,9 @@
 import 'dart:convert';
-import 'dart:io';
-
-import 'package:archive/archive.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:archive/archive.dart';
 
 import '../modelos/musica.dart';
+import 'salvador_arquivo.dart';
 import 'transpositor_acordes.dart';
 
 /// Exporta cifras em .zip, com um .txt por música.
@@ -47,20 +45,6 @@ class ExportService {
       archive.addFile(ArchiveFile(e.key, bytes.length, bytes));
     }
     final bytes = Uint8List.fromList(ZipEncoder().encode(archive)!);
-    final path = await FilePicker.platform.saveFile(
-      dialogTitle: 'Salvar ZIP',
-      fileName: fileName,
-      type: FileType.custom,
-      allowedExtensions: ['zip'],
-      bytes: kIsWeb ? bytes : null,
-    );
-    if (path == null) return false;
-    // No desktop o seletor só devolve o caminho; o arquivo é gravado aqui.
-    final desktop = !kIsWeb &&
-        (defaultTargetPlatform == TargetPlatform.macOS ||
-            defaultTargetPlatform == TargetPlatform.windows ||
-            defaultTargetPlatform == TargetPlatform.linux);
-    if (desktop) await File(path).writeAsBytes(bytes);
-    return true;
+    return saveFileToDevice(fileName, bytes);
   }
 }

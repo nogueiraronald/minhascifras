@@ -123,6 +123,14 @@ class SetlistRepository extends ChangeNotifier {
     await _persist();
   }
 
+  /// Limpa todas as setlists e itens locais para deslogar e começar um novo repertório do zero.
+  Future<void> clearAll() async {
+    _lists.clear();
+    _items.clear();
+    await _persist();
+    notifyListeners();
+  }
+
   Future<void> addSongs(String setlistId, List<String> songIds) async {
     var pos = itemsFor(setlistId).length;
     for (final sid in songIds) {

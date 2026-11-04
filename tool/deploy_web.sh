@@ -17,11 +17,11 @@ echo ""
 echo "🚀 [2/2] Enviando para o repositório público minhascifras-web..."
 
 cd build/web
-if [ ! -d ".git" ] || [ "$(git remote get-url origin 2>/dev/null)" != "git@github.com:nogueiraronald/minhascifras-web.git" ]; then
+if [ ! -d ".git" ] || [ "$(git remote get-url origin 2>/dev/null)" != "https://github.com/nogueiraronald/minhascifras-web.git" ]; then
   echo "Configurando repositório minhascifras-web em build/web..."
   rm -rf .git
   git init -b main
-  git remote add origin git@github.com:nogueiraronald/minhascifras-web.git
+  git remote add origin https://github.com/nogueiraronald/minhascifras-web.git
   git fetch origin main || true
   git reset --soft origin/main 2>/dev/null || true
 fi

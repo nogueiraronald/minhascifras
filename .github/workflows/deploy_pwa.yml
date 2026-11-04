@@ -38,6 +38,8 @@ jobs:
         run: |
           REPO_NAME="${GITHUB_REPOSITORY#*/}"
           flutter build web --release --base-href "/${REPO_NAME}/"
+          cp web/sw.js build/web/sw.js
+          cp web/sw.js build/web/flutter_service_worker.js
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

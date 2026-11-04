@@ -3076,7 +3076,13 @@ class _MainScreenState extends State<MainScreen> {
                       onPressed: () => widget.theme!.toggle(context),
                     ),
                   SyncButton(sync: widget.sync, account: widget.account),
-                  AccountButton(account: widget.account, compact: true),
+                  AccountButton(
+                    account: widget.account,
+                    songs: widget.repository,
+                    setlists: widget.setlists,
+                    sync: widget.sync,
+                    compact: true,
+                  ),
                 ],
               ),
               const SizedBox(height: 10),
@@ -4371,7 +4377,12 @@ class _MainScreenState extends State<MainScreen> {
                                 await widget.sync.sync();
                               } else if (val == 'account') {
                                 DesktopLoginDialog.show(
-                                    context, widget.account);
+                                  context,
+                                  widget.account,
+                                  songs: widget.repository,
+                                  setlists: widget.setlists,
+                                  sync: widget.sync,
+                                );
                               }
                             },
                             itemBuilder: (ctx) => [
@@ -4425,7 +4436,7 @@ class _MainScreenState extends State<MainScreen> {
                                     SizedBox(width: 10),
                                     Expanded(
                                       child: Text(
-                                        'Sincronizar com o Google Drive',
+                                        'Sincronizar com a Nuvem',
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),

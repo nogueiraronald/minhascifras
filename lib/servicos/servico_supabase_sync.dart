@@ -56,6 +56,8 @@ class SupabaseSyncService {
         .map((e) => e.toString())
         .toList();
 
+    final passwordHash = dados['senha_hash'] as String?;
+
     return CloudData(
       songs: songsRaw
           .whereType<Map<String, dynamic>>()
@@ -72,7 +74,31 @@ class SupabaseSyncService {
       deletedSongIds: deletedSongIds,
       deletedSetlistIds: deletedSetlistIds,
       deletedItemIds: deletedItemIds,
+      passwordHash: passwordHash,
     );
+  }
+
+  /// Verifica se um código possui senha de proteção configurada na nuvem.
+  Future<String?> checkPasswordHash(String syncCode) async {
+    final cleanCode = syncCode.trim().toUpperCase();
+    if (cleanCode.isEmpty) return null;
+
+    final uri = Uri.parse(
+        '${AppConfig.supabaseUrl}/rest/v1/repertorios_sync?codigo=eq.$cleanCode&select=dados');
+
+    try {
+      final response = await http.get(uri, headers: _headers);
+      if (response.statusCode != 200) return null;
+
+      final list = jsonDecode(utf8.decode(response.bodyBytes)) as List;
+      if (list.isEmpty) return null;
+
+      final first = list.first as Map<String, dynamic>;
+      final dados = first['dados'] as Map<String, dynamic>? ?? {};
+      return dados['senha_hash'] as String?;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Grava o repertório completo para o código de sincronização usando Upsert.
@@ -82,16 +108,21 @@ class SupabaseSyncService {
 
     final uri = Uri.parse('${AppConfig.supabaseUrl}/rest/v1/repertorios_sync');
 
+    final dadosMap = <String, dynamic>{
+      'songs': data.songs.map((s) => s.toJson()).toList(),
+      'setlists': data.setlists.map((s) => s.toJson()).toList(),
+      'items': data.items.map((i) => i.toJson()).toList(),
+      'deletedSongIds': data.deletedSongIds,
+      'deletedSetlistIds': data.deletedSetlistIds,
+      'deletedItemIds': data.deletedItemIds,
+    };
+    if (data.passwordHash != null && data.passwordHash!.isNotEmpty) {
+      dadosMap['senha_hash'] = data.passwordHash;
+    }
+
     final payload = {
       'codigo': cleanCode,
-      'dados': {
-        'songs': data.songs.map((s) => s.toJson()).toList(),
-        'setlists': data.setlists.map((s) => s.toJson()).toList(),
-        'items': data.items.map((i) => i.toJson()).toList(),
-        'deletedSongIds': data.deletedSongIds,
-        'deletedSetlistIds': data.deletedSetlistIds,
-        'deletedItemIds': data.deletedItemIds,
-      },
+      'dados': dadosMap,
       'atualizado_em': DateTime.now().toUtc().toIso8601String(),
     };
 

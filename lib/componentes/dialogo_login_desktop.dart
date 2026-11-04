@@ -1,24 +1,50 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../dados/controlador_conta.dart';
+import '../dados/repositorio_listas.dart';
+import '../dados/repositorio_musicas.dart';
+import '../servicos/servico_pdf_recuperacao.dart';
+import '../servicos/servico_sincronizacao.dart';
 import 'estilo_app.dart';
 
-/// Diálogo moderno de Sincronização em Nuvem com QR Code e pareamento sem login/senha.
-/// Totalmente responsivo para celulares (iOS/Android) e navegadores desktop.
+/// Diálogo moderno de Sincronização em Nuvem com QR Code, proteção por senha opcional,
+/// download de cartão de recuperação em PDF e opção de sair/começar do zero.
 class DesktopLoginDialog extends StatefulWidget {
-  const DesktopLoginDialog({super.key, required this.account});
+  const DesktopLoginDialog({
+    super.key,
+    required this.account,
+    this.songs,
+    this.setlists,
+    this.sync,
+  });
 
   final AccountController account;
+  final SongRepository? songs;
+  final SetlistRepository? setlists;
+  final SyncService? sync;
 
-  static Future<void> show(BuildContext context, AccountController account) {
+  static Future<void> show(
+    BuildContext context,
+    AccountController account, {
+    SongRepository? songs,
+    SetlistRepository? setlists,
+    SyncService? sync,
+  }) {
     return showDialog<void>(
       context: context,
       useSafeArea: true,
-      builder: (_) => DesktopLoginDialog(account: account),
+      builder: (_) => DesktopLoginDialog(
+        account: account,
+        songs: songs,
+        setlists: setlists,
+        sync: sync,
+      ),
     );
   }
 
@@ -86,7 +112,34 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
     });
 
     try {
-      await widget.account.connectToSyncCode(code);
+      // 1. Verifica se o repertório na nuvem exige senha
+      final remoteHash = await widget.account.checkRemotePassword(code);
+      String? verifiedPasswordHash;
+
+      if (remoteHash != null && remoteHash.isNotEmpty) {
+        setState(() => _loading = false);
+        if (!mounted) return;
+
+        final typedPassword = await _promptPasswordDialog(context, code);
+        if (typedPassword == null) return; // Cancelou
+
+        final typedHash =
+            sha256.convert(utf8.encode(typedPassword.trim())).toString();
+        if (typedHash != remoteHash) {
+          setState(() {
+            _error =
+                'Senha incorreta! Não foi possível autorizar o acesso a este repertório.';
+          });
+          return;
+        }
+        verifiedPasswordHash = typedHash;
+        setState(() => _loading = true);
+      }
+
+      await widget.account.connectToSyncCode(code,
+          passwordHash: verifiedPasswordHash);
+      await widget.sync?.sync();
+
       if (!mounted) return;
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -106,41 +159,308 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
     }
   }
 
-  Future<void> _generateNewCode() async {
+  Future<String?> _promptPasswordDialog(
+      BuildContext context, String code) async {
+    final passCtrl = TextEditingController();
+    bool obscure = true;
+
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.lock_rounded, color: AppCores.roxo, size: 22),
+              SizedBox(width: 10),
+              Text('Repertório Protegido', style: TextStyle(fontSize: 17)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'A chave $code possui uma senha de proteção configurada.',
+                style: const TextStyle(fontSize: 13, height: 1.3),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: passCtrl,
+                obscureText: obscure,
+                autofocus: true,
+                decoration: InputDecoration(
+                  labelText: 'Digite a senha do repertório',
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                  suffixIcon: IconButton(
+                    icon: Icon(obscure
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined),
+                    onPressed: () => setDialogState(() => obscure = !obscure),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, null),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, passCtrl.text),
+              child: const Text('Desbloquear'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showSetPasswordDialog() async {
+    final passCtrl = TextEditingController();
+    final confirmCtrl = TextEditingController();
+    bool obscure = true;
+    String? localError;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Definir Senha de Proteção',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Defina uma senha para que ninguém consiga acessar seu repertório caso descubra o código por acaso.',
+                style: TextStyle(fontSize: 12.5, height: 1.3),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: passCtrl,
+                obscureText: obscure,
+                decoration: InputDecoration(
+                  labelText: 'Nova Senha',
+                  isDense: true,
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                  suffixIcon: IconButton(
+                    icon: Icon(obscure
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined),
+                    onPressed: () => setDialogState(() => obscure = !obscure),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: confirmCtrl,
+                obscureText: obscure,
+                decoration: InputDecoration(
+                  labelText: 'Confirmar Senha',
+                  isDense: true,
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+              if (localError != null) ...[
+                const SizedBox(height: 10),
+                Text(localError!,
+                    style: const TextStyle(color: Colors.red, fontSize: 12)),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                final p1 = passCtrl.text.trim();
+                final p2 = confirmCtrl.text.trim();
+                if (p1.isEmpty) {
+                  setDialogState(
+                      () => localError = 'A senha não pode ser vazia.');
+                  return;
+                }
+                if (p1 != p2) {
+                  setDialogState(() => localError = 'As senhas não coincidem.');
+                  return;
+                }
+                final messenger = ScaffoldMessenger.of(context);
+                await widget.account.setPassword(p1);
+                await widget.sync?.sync();
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (mounted) {
+                  messenger.showSnackBar(
+                    const SnackBar(
+                      content:
+                          Text('Senha de proteção configurada com sucesso!'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              },
+              child: const Text('Salvar Senha'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showPasswordOptionsDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Opções de Senha', style: TextStyle(fontSize: 17)),
+        content: const Text(
+          'A proteção por senha está ativa para este repertório. Você pode alterar a senha atual ou removê-la.',
+          style: TextStyle(fontSize: 13, height: 1.3),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              final messenger = ScaffoldMessenger.of(context);
+              Navigator.pop(ctx);
+              await widget.account.removePassword();
+              await widget.sync?.sync();
+              if (mounted) {
+                messenger.showSnackBar(
+                  const SnackBar(
+                    content: Text('Senha de proteção removida.'),
+                  ),
+                );
+              }
+            },
+            child: const Text('Remover Senha',
+                style: TextStyle(color: Colors.red)),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _showSetPasswordDialog();
+            },
+            child: const Text('Alterar Senha'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showSignOutDialog() async {
+    final currentCode = widget.account.syncCode ?? '---';
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Gerar Nova Chave?'),
-        content: const Text(
-          'Isso criará uma nova chave para este aparelho. As cifras locais serão mantidas.',
+        title: const Row(
+          children: [
+            Icon(Icons.logout_rounded, color: Colors.redAccent, size: 22),
+            SizedBox(width: 8),
+            Text('Sair deste Repertório?',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Deseja deslogar deste aparelho?',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '• As cifras e listas locais serão excluídas deste aparelho para você começar do zero com uma nova chave vazia.\n\n'
+              '• O repertório antigo NÃO é apagado da nuvem e você poderá se reconectar a ele a qualquer momento usando a chave $currentCode.',
+              style: const TextStyle(fontSize: 12.5, height: 1.35),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.amber.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.lightbulb_outline, size: 18, color: Colors.amber),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Dica: Baixe o Cartão de Recuperação em PDF antes de sair para guardar sua chave antiga!',
+                      style: TextStyle(fontSize: 11, height: 1.3),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Cancelar'),
           ),
-          FilledButton(
+          FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red[700]),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Gerar Nova'),
+            icon: const Icon(Icons.delete_sweep_rounded, size: 18),
+            label: const Text('Sim, Sair e Limpar'),
           ),
         ],
       ),
     );
 
     if (confirmed != true) return;
+    if (!mounted) return;
 
     setState(() => _loading = true);
-    await widget.account.generateNewSyncCode();
-    if (mounted) {
-      setState(() => _loading = false);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await widget.songs?.clearAll();
+      await widget.setlists?.clearAll();
+      final newCode = await widget.account.resetToNewAccount();
+
+      if (mounted) {
+        setState(() => _loading = false);
+        Navigator.pop(context);
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+                'Você saiu do repertório antigo. Novo repertório limpo criado ($newCode)!'),
+            backgroundColor: Colors.green[800],
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _loading = false);
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Erro ao sair do repertório: $e'),
+            backgroundColor: Colors.red[800],
+          ),
+        );
+      }
     }
+  }
+
+  Future<void> _downloadRecoveryPdf() async {
+    await RecoveryPdfService.generateAndDownload(
+      account: widget.account,
+      context: context,
+      songCount: widget.songs?.songs.length,
+      setlistCount: widget.setlists?.setlists.length,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final currentCode = widget.account.syncCode ?? '---';
-    final syncUrl = widget.account.syncUrl;
 
     final mediaQuery = MediaQuery.of(context);
     final viewInsetsBottom = mediaQuery.viewInsets.bottom;
@@ -159,34 +479,43 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
           (isKeyboardOpen ? 24.0 : 64.0),
     );
 
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      insetPadding: EdgeInsets.symmetric(
-        horizontal: isSmallScreen ? 12 : 24,
-        vertical: isKeyboardOpen ? 6 : 20,
-      ),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: maxDialogHeight,
-        ),
-        child: CartaoDialogoModerno(
-          width: 440,
-          margin: EdgeInsets.zero,
-          child: SingleChildScrollView(
-            controller: _scrollCtrl,
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            child: _showManualInput
-                ? _buildManualInputView(context, isDark)
-                : _buildQrCodeView(
-                    context, isDark, currentCode, syncUrl, isSmallScreen),
+    return ListenableBuilder(
+      listenable: widget.account,
+      builder: (context, _) {
+        final currentCode = widget.account.syncCode ?? '---';
+        final syncUrl = widget.account.syncUrl;
+
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          insetPadding: EdgeInsets.symmetric(
+            horizontal: isSmallScreen ? 12 : 24,
+            vertical: isKeyboardOpen ? 6 : 20,
           ),
-        ),
-      ),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: maxDialogHeight,
+            ),
+            child: CartaoDialogoModerno(
+              width: 440,
+              margin: EdgeInsets.zero,
+              child: SingleChildScrollView(
+                controller: _scrollCtrl,
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                child: _showManualInput
+                    ? _buildManualInputView(context, isDark)
+                    : _buildQrCodeView(context, isDark, currentCode, syncUrl,
+                        isSmallScreen),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
-  /// Visão 1 (Padrão): QR Code de alta visibilidade e Chave Oculta por padrão
+  /// Visão 1 (Padrão): QR Code de alta visibilidade, Chave Oculta, PDF e Proteção por Senha
   Widget _buildQrCodeView(
     BuildContext context,
     bool isDark,
@@ -194,6 +523,8 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
     String syncUrl,
     bool isSmallScreen,
   ) {
+    final isProtected = widget.account.isPasswordProtected;
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -241,12 +572,14 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
             ),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
 
         // QR CODE em destaque com fundo branco e contraste nítido
         Center(
           child: Container(
-            padding: const EdgeInsets.all(12),
+            width: isSmallScreen ? 165.0 : 185.0,
+            height: isSmallScreen ? 165.0 : 185.0,
+            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(16),
@@ -261,7 +594,7 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
             child: QrImageView(
               data: syncUrl,
               version: QrVersions.auto,
-              size: isSmallScreen ? 155.0 : 175.0,
+              size: isSmallScreen ? 145.0 : 165.0,
               backgroundColor: Colors.white,
               eyeStyle: const QrEyeStyle(
                 eyeShape: QrEyeShape.square,
@@ -271,23 +604,33 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
                 dataModuleShape: QrDataModuleShape.square,
                 color: Color(0xFF1E1B4B),
               ),
+              errorStateBuilder: (cxt, err) {
+                return Center(
+                  child: Text(
+                    'Código: $currentCode',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                );
+              },
             ),
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
 
         // Instrução amigável
         Text(
           'Aponte a câmera do celular ou tablet para este QR Code para abrir e conectar o mesmo repertório instantaneamente.',
           textAlign: TextAlign.center,
           style: TextStyle(
-            fontSize: 12.5,
+            fontSize: 12,
             height: 1.35,
             color: isDark ? Colors.grey[300] : Colors.grey[700],
           ),
         ),
 
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
 
         // Botão para ver a chave em texto (Oculta por padrão conforme solicitado)
         Center(
@@ -315,7 +658,7 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
 
         if (_showCodeText) ...[
           Container(
-            margin: const EdgeInsets.only(top: 4, bottom: 8),
+            margin: const EdgeInsets.only(top: 2, bottom: 6),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
               color: AppCores.roxo.withValues(alpha: isDark ? 0.15 : 0.08),
@@ -357,19 +700,109 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
           ),
         ],
 
-        const SizedBox(height: 4),
+        // Bloco de Proteção por Senha
+        Container(
+          margin: const EdgeInsets.symmetric(vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.05)
+                : Colors.black.withValues(alpha: 0.03),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isProtected
+                  ? Colors.green.withValues(alpha: 0.4)
+                  : (isDark ? Colors.white12 : Colors.black12),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                isProtected ? Icons.lock_rounded : Icons.lock_open_rounded,
+                size: 18,
+                color: isProtected
+                    ? Colors.green
+                    : (isDark ? Colors.grey[400] : Colors.grey[600]),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Proteção por Senha',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                    Text(
+                      isProtected
+                          ? 'Ativa (bloqueia tentativas incorretas)'
+                          : 'Desativada (livre via chave)',
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        color: isProtected
+                            ? Colors.green
+                            : (isDark ? Colors.grey[400] : Colors.grey[600]),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              TextButton(
+                onPressed: isProtected
+                    ? _showPasswordOptionsDialog
+                    : _showSetPasswordDialog,
+                style: TextButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                ),
+                child: Text(
+                  isProtected ? 'Opções' : 'Definir',
+                  style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: AppCores.roxo),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Botão para Baixar Cartão de Recuperação em PDF
+        OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            side: BorderSide(
+              color: AppCores.roxo.withValues(alpha: 0.5),
+              width: 1.2,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          onPressed: _downloadRecoveryPdf,
+          icon: const Icon(Icons.picture_as_pdf_rounded,
+              size: 18, color: AppCores.roxo),
+          label: const Text(
+            'Baixar Cartão de Recuperação (PDF)',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: AppCores.roxo,
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 6),
 
         // Opção secundária: Digitar código caso o usuário não possa escanear
         Center(
-          child: OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              side: BorderSide(
-                color: isDark ? Colors.white24 : Colors.black12,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+          child: TextButton.icon(
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             ),
             onPressed: () {
               setState(() {
@@ -377,35 +810,38 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
                 _error = null;
               });
             },
-            icon: const Icon(Icons.keyboard_outlined, size: 18),
+            icon: const Icon(Icons.keyboard_outlined, size: 16),
             label: const Text(
               'Não pode usar a câmera? Digitar chave',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
             ),
           ),
         ),
 
-        const SizedBox(height: 16),
+        Center(
+          child: TextButton.icon(
+            onPressed: _showSignOutDialog,
+            icon: const Icon(Icons.logout_rounded,
+                size: 15, color: Colors.redAccent),
+            label: const Text(
+              'Sair desta conta / Começar do Zero',
+              style: TextStyle(
+                fontSize: 11.5,
+                color: Colors.redAccent,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 10),
 
         Row(
           children: [
-            TextButton(
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-              ),
-              onPressed: _generateNewCode,
-              child: Text(
-                'Nova chave',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: isDark ? Colors.grey[400] : Colors.grey[600],
-                ),
-              ),
-            ),
             const Spacer(),
             BotaoGradiente(
               onPressed: () => Navigator.pop(context),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               fontSize: 12.5,
               label: 'Concluído',
               icon: Icons.check_rounded,

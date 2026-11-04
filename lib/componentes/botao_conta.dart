@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../dados/controlador_conta.dart';
+import '../dados/repositorio_listas.dart';
+import '../dados/repositorio_musicas.dart';
+import '../servicos/servico_sincronizacao.dart';
 import 'dialogo_login_desktop.dart';
 
 /// Botão de status e acesso à sincronização em nuvem (Supabase).
@@ -8,11 +11,27 @@ class AccountButton extends StatelessWidget {
   const AccountButton({
     super.key,
     required this.account,
+    this.songs,
+    this.setlists,
+    this.sync,
     this.compact = false,
   });
 
   final AccountController account;
+  final SongRepository? songs;
+  final SetlistRepository? setlists;
+  final SyncService? sync;
   final bool compact;
+
+  void _openDialog(BuildContext context) {
+    DesktopLoginDialog.show(
+      context,
+      account,
+      songs: songs,
+      setlists: setlists,
+      sync: sync,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -44,12 +63,12 @@ class AccountButton extends StatelessWidget {
                   isOk ? Icons.cloud_done_outlined : Icons.cloud_off_outlined,
                   color: isOk ? Colors.green : Colors.amber,
                 ),
-                onPressed: () => DesktopLoginDialog.show(context, account),
+                onPressed: () => _openDialog(context),
               );
             }
 
             return TextButton.icon(
-              onPressed: () => DesktopLoginDialog.show(context, account),
+              onPressed: () => _openDialog(context),
               icon: Icon(
                 isOk ? Icons.cloud_done_outlined : Icons.cloud_off_outlined,
                 color: isOk ? Colors.green : Colors.amber,

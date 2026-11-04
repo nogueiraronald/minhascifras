@@ -42,7 +42,7 @@ class SyncButton extends StatelessWidget {
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                     ),
                     SizedBox(width: 12),
-                    Text('Sincronizando com o Google Drive...'),
+                    Text('Sincronizando com a Nuvem...'),
                   ],
                 ),
                 duration: Duration(seconds: 4),
@@ -64,7 +64,7 @@ class SyncButton extends StatelessWidget {
               } else {
                 messenger.showSnackBar(
                   SnackBar(
-                    content: const Text('✓ Sincronizado com o Google Drive com sucesso!'),
+                    content: const Text('✓ Sincronizado com a Nuvem com sucesso!'),
                     backgroundColor: Colors.green[700],
                     duration: const Duration(seconds: 3),
                   ),

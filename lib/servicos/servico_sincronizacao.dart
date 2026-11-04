@@ -132,9 +132,10 @@ class SyncService extends ChangeNotifier {
       ..._setlists.allItems.where((i) => i.deleted).map((i) => i.id),
     }.toList();
 
-    // Sempre envia o backup na primeira sincronização ou quando houver novidades locais
+    // Sempre envia o backup na primeira sincronização ou quando houver novidades locais ou senha alterada
     final isFirstUpload = remote.songs.isEmpty && _songs.songs.isNotEmpty;
-    if (songPush || setlistPush || itemPush || isFirstUpload) {
+    final passwordChanged = _account.passwordHash != remote.passwordHash;
+    if (songPush || setlistPush || itemPush || isFirstUpload || passwordChanged) {
       await _supabaseSync.writeAll(
         code,
         CloudData(
@@ -144,6 +145,7 @@ class SyncService extends ChangeNotifier {
           deletedSongIds: allDeletedSongIds,
           deletedSetlistIds: allDeletedSetlistIds,
           deletedItemIds: allDeletedItemIds,
+          passwordHash: _account.passwordHash,
         ),
       );
     }

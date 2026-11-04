@@ -86,6 +86,13 @@ class SongRepository extends ChangeNotifier {
     onLocalChange?.call();
   }
 
+  /// Limpa todas as músicas locais para deslogar e começar um novo repertório do zero.
+  Future<void> clearAll() async {
+    _songs.clear();
+    await _persist();
+    notifyListeners();
+  }
+
   Future<void> setSongTags(String id, List<String> tags) async {
     final i = _songs.indexWhere((s) => s.id == id);
     if (i < 0) return;
