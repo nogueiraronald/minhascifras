@@ -37,6 +37,7 @@ import '../servicos/controlador_audio_karaoke.dart';
 import '../componentes/barra_player_karaoke.dart';
 import '../componentes/player_youtube_embutido.dart';
 import '../servicos/servico_atualizacao_pwa.dart';
+import '../servicos/servico_wakelock.dart';
 
 /// Modos de exibição da música: Cifra completa, Letra pura ou Partitura musical.
 enum SongDisplayMode {
@@ -164,6 +165,7 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void initState() {
     super.initState();
+    ServicoWakeLock.manterTelaAtiva(true);
     _loadUserPreferences();
     widget.account.addListener(_checkAccountLock);
     _searchController.addListener(() {
@@ -193,6 +195,7 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   void dispose() {
+    ServicoWakeLock.manterTelaAtiva(false);
     widget.account.removeListener(_checkAccountLock);
     _karaokeController?.dispose();
     _searchController.dispose();
@@ -226,6 +229,8 @@ class _MainScreenState extends State<MainScreen> {
     if (songs.isNotEmpty) {
       if (_currentSong == null || !songs.any((s) => s.id == _currentSong!.id)) {
         _selectSong(songs.first);
+      } else {
+        ServicoWakeLock.manterTelaAtiva(true);
       }
     } else {
       setState(() {
@@ -234,6 +239,7 @@ class _MainScreenState extends State<MainScreen> {
         _transpose = 0;
       });
       _initKaraokeController(null);
+      ServicoWakeLock.manterTelaAtiva(false);
     }
   }
 
@@ -311,6 +317,7 @@ class _MainScreenState extends State<MainScreen> {
       _transpose = songTranspose;
     });
 
+    ServicoWakeLock.manterTelaAtiva(true);
     _initKaraokeController(song);
 
     FocusManager.instance.primaryFocus?.unfocus();
@@ -2032,20 +2039,13 @@ class _MainScreenState extends State<MainScreen> {
               if (_currentSong?.hasAudio == true &&
                   _currentSong?.audioType == 'youtube' &&
                   Song.extractYoutubeVideoId(_currentSong!.audioUrl!) != null)
-                Positioned(
-                  right: 12,
-                  bottom: 8,
-                  child: Visibility(
-                    visible: _showYoutubeVideo,
-                    maintainState: true,
-                    maintainAnimation: true,
-                    maintainSize: false,
-                    child: PlayerYoutubeEmbutido(
-                      videoId: Song.extractYoutubeVideoId(_currentSong!.audioUrl!)!,
-                      controller: _karaokeController,
-                      onClose: () => setState(() => _showYoutubeVideo = false),
-                    ),
-                  ),
+                PlayerYoutubeEmbutido(
+                  videoId: Song.extractYoutubeVideoId(_currentSong!.audioUrl!)!,
+                  controller: _karaokeController,
+                  visible: _showYoutubeVideo,
+                  initialRight: 12,
+                  initialBottom: 8,
+                  onClose: () => setState(() => _showYoutubeVideo = false),
                 ),
             ],
           ),

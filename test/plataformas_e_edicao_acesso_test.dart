@@ -11,6 +11,8 @@ import 'package:cifras_app/modelos/musica.dart';
 import 'package:cifras_app/telas/tela_principal.dart';
 import 'package:cifras_app/telas/tela_edicao_cifra.dart';
 import 'package:cifras_app/servicos/controlador_audio_karaoke.dart';
+import 'package:cifras_app/servicos/servico_wakelock.dart';
+import 'package:cifras_app/componentes/player_youtube_embutido.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -380,11 +382,170 @@ void main() {
       expect(controller.currentPosition.inMilliseconds, greaterThan(0));
 
       // Pausa o Karaokê
+      await tester.pump();
       await controller.pause();
       expect(controller.isPlaying, isFalse);
 
       controller.dispose();
       scrollController.dispose();
+    });
+
+    testWidgets('Mini player pode ser redimensionado e alterado de local (arrastado ou trocado de canto)', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: Stack(
+              children: [
+                PlayerYoutubeEmbutido(
+                  videoId: 'dQw4w9WgXcQ',
+                  initialRight: 12,
+                  initialBottom: 8,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final cardFinder = find.byKey(const ValueKey('mini_player_card'));
+      expect(cardFinder, findsOneWidget);
+
+      final initialRect = tester.getRect(cardFinder);
+      expect(initialRect.width, closeTo(290.0, 1.0));
+
+      // 1. Redimensionar pelo botão (+)
+      final expandBtn = find.byKey(const ValueKey('mini_player_expand_btn'));
+      await tester.tap(expandBtn);
+      await tester.pumpAndSettle();
+
+      final expandedRect = tester.getRect(cardFinder);
+      expect(expandedRect.width, closeTo(330.0, 1.0));
+
+      // 2. Redimensionar pelo botão (-)
+      final shrinkBtn = find.byKey(const ValueKey('mini_player_shrink_btn'));
+      await tester.tap(shrinkBtn);
+      await tester.tap(shrinkBtn);
+      await tester.pumpAndSettle();
+
+      final shrunkRect = tester.getRect(cardFinder);
+      expect(shrunkRect.width, closeTo(250.0, 1.0));
+
+      // 3. Alterar de local arrastando a barra superior
+      final headerFinder = find.byKey(const ValueKey('mini_player_drag_header'));
+      final beforeDragCenter = tester.getCenter(cardFinder);
+      await tester.drag(headerFinder, const Offset(-150, -120));
+      await tester.pumpAndSettle();
+
+      final afterDragCenter = tester.getCenter(cardFinder);
+      expect(afterDragCenter.dx, lessThan(beforeDragCenter.dx - 100));
+      expect(afterDragCenter.dy, lessThan(beforeDragCenter.dy - 80));
+
+      // 4. Alterar de canto pelo botão de mudar local
+      final moveCornerBtn = find.byKey(const ValueKey('mini_player_move_corner_btn'));
+      await tester.tap(moveCornerBtn);
+      await tester.pumpAndSettle();
+
+      final afterCornerCenter = tester.getCenter(cardFinder);
+      expect(afterCornerCenter, isNot(equals(afterDragCenter)));
+    });
+
+    testWidgets('Proteção de bloqueio de tela (WakeLock) fica ativa durante exibição das cifras', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final repo = await SongRepository.open();
+      final chords = await ChordLibrary.open();
+      final account = await AccountController.open();
+      final setlists = await SetlistRepository.open();
+      final musicThemes = await ThemeRepository.open();
+      final sync = SyncService(repo, setlists, account);
+
+      await repo.save(
+        Song(
+          id: 'wake-1',
+          title: 'Música Tela Ativa',
+          artist: 'Artista',
+          content: 'C G Am F\nLetra da cifra exibida',
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MainScreen(
+            repository: repo,
+            chords: chords,
+            account: account,
+            sync: sync,
+            setlists: setlists,
+            musicThemes: musicThemes,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle(const Duration(milliseconds: 400));
+
+      expect(ServicoWakeLock.estaAtivo, isTrue);
+    });
+
+    testWidgets('Linha com os acordes na edição de cifras não perde foco nem função ao arrastar para o lado no celular', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final repo = await SongRepository.open();
+      final song = Song(
+        id: 'edit-chord-drag-1',
+        title: 'Música Edição Mobile',
+        artist: 'Artista Mobile',
+        content: 'Primeira linha\nSegunda linha',
+      );
+      await repo.save(song);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SongEditScreen(
+            repository: repo,
+            song: song,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final contentFieldFinder = find.byKey(const ValueKey('edit_song_content_field'));
+      await tester.ensureVisible(contentFieldFinder);
+      await tester.pumpAndSettle();
+      await tester.tap(contentFieldFinder);
+      await tester.pump();
+
+      // Posiciona o cursor no início do texto (offset 0)
+      final textField = tester.widget<TextField>(contentFieldFinder);
+      textField.controller!.selection = const TextSelection.collapsed(offset: 0);
+      await tester.pump();
+
+      // Muda para a categoria "Com 7ª" e arrasta a linha de acordes para o lado no celular
+      await tester.tap(find.text('Com 7ª'));
+      await tester.pumpAndSettle();
+
+      final chordScrollFinder = find.byKey(const ValueKey('chord_buttons_scroll'));
+      expect(chordScrollFinder, findsOneWidget);
+
+      // Arrasta para o lado (esquerda) na linha de acordes
+      await tester.drag(chordScrollFinder, const Offset(-140, 0));
+      await tester.pumpAndSettle();
+
+      // Toca em um acorde após ter arrastado para o lado
+      final chordChip = find.byKey(const ValueKey('chord_chip_Am7'));
+      expect(chordChip, findsOneWidget);
+      await tester.tap(chordChip);
+      await tester.pump();
+
+      // Verifica que o acorde foi inserido exatamente na posição do cursor (início do texto), sem perder o uso!
+      expect(textField.controller!.text.startsWith('Am7 '), isTrue);
+      expect(tester.takeException(), isNull);
     });
   });
 }

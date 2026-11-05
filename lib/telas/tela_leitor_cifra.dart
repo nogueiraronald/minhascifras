@@ -10,6 +10,7 @@ import '../dados/biblioteca_acordes.dart';
 import '../dados/repositorio_musicas.dart';
 import '../modelos/musica.dart';
 import '../servicos/controlador_audio_karaoke.dart';
+import '../servicos/servico_wakelock.dart';
 import '../servicos/transpositor_acordes.dart';
 import 'tela_edicao_cifra.dart';
 
@@ -56,6 +57,7 @@ class _SongReaderScreenState extends State<SongReaderScreen> {
   @override
   void initState() {
     super.initState();
+    ServicoWakeLock.manterTelaAtiva(true);
     _initKaraoke(_song);
   }
 
@@ -239,20 +241,13 @@ class _SongReaderScreenState extends State<SongReaderScreen> {
           if (_song.hasAudio &&
               _song.audioType == 'youtube' &&
               Song.extractYoutubeVideoId(_song.audioUrl!) != null)
-            Positioned(
-              right: 12,
-              bottom: 56,
-              child: Visibility(
-                visible: _showYoutubeVideo,
-                maintainState: true,
-                maintainAnimation: true,
-                maintainSize: false,
-                child: PlayerYoutubeEmbutido(
-                  videoId: Song.extractYoutubeVideoId(_song.audioUrl!)!,
-                  controller: _karaokeController,
-                  onClose: () => setState(() => _showYoutubeVideo = false),
-                ),
-              ),
+            PlayerYoutubeEmbutido(
+              videoId: Song.extractYoutubeVideoId(_song.audioUrl!)!,
+              controller: _karaokeController,
+              visible: _showYoutubeVideo,
+              initialRight: 12,
+              initialBottom: 56,
+              onClose: () => setState(() => _showYoutubeVideo = false),
             ),
         ],
       ),

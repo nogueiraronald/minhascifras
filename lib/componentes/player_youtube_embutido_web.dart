@@ -14,11 +14,13 @@ Widget buildYoutubePlayerView({
   required String videoId,
   KaraokeAudioController? controller,
   VoidCallback? onClose,
+  bool isInteracting = false,
 }) {
   return _YoutubePlayerEmbedView(
     videoId: videoId,
     controller: controller,
     onClose: onClose,
+    isInteracting: isInteracting,
   );
 }
 
@@ -27,11 +29,13 @@ class _YoutubePlayerEmbedView extends StatefulWidget {
     required this.videoId,
     this.controller,
     this.onClose,
+    this.isInteracting = false,
   });
 
   final String videoId;
   final KaraokeAudioController? controller;
   final VoidCallback? onClose;
+  final bool isInteracting;
 
   @override
   State<_YoutubePlayerEmbedView> createState() => _YoutubePlayerEmbedViewState();
@@ -40,7 +44,7 @@ class _YoutubePlayerEmbedView extends StatefulWidget {
 class _YoutubePlayerEmbedViewState extends State<_YoutubePlayerEmbedView> {
   StreamSubscription<html.MessageEvent>? _messageSub;
   Timer? _progressPollTimer;
-  late final String _viewType;
+  late String _viewType;
   html.IFrameElement? _iframe;
 
   @override
@@ -50,12 +54,14 @@ class _YoutubePlayerEmbedViewState extends State<_YoutubePlayerEmbedView> {
     _setupIframe();
     _attachController();
     _startMessageListener();
+    _updateIframePointerEvents();
   }
 
   @override
   void didUpdateWidget(covariant _YoutubePlayerEmbedView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.videoId != widget.videoId) {
+      _viewType = 'youtube-iframe-${widget.videoId}';
       _detachController(oldWidget.controller);
       _setupIframe();
       _attachController();
@@ -63,6 +69,13 @@ class _YoutubePlayerEmbedViewState extends State<_YoutubePlayerEmbedView> {
       _detachController(oldWidget.controller);
       _attachController();
     }
+    if (oldWidget.isInteracting != widget.isInteracting) {
+      _updateIframePointerEvents();
+    }
+  }
+
+  void _updateIframePointerEvents() {
+    _iframe?.style.pointerEvents = widget.isInteracting ? 'none' : 'auto';
   }
 
   void _setupIframe() {
@@ -74,7 +87,6 @@ class _YoutubePlayerEmbedViewState extends State<_YoutubePlayerEmbedView> {
         ..style.border = 'none'
         ..style.width = '100%'
         ..style.height = '100%'
-        ..style.borderRadius = '10px'
         ..allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture'
         ..allowFullscreen = true;
 
@@ -90,6 +102,7 @@ class _YoutubePlayerEmbedViewState extends State<_YoutubePlayerEmbedView> {
     }
 
     _iframe = _registeredIframes[widget.videoId];
+    _updateIframePointerEvents();
   }
 
   void _attachController() {
@@ -209,71 +222,13 @@ class _YoutubePlayerEmbedViewState extends State<_YoutubePlayerEmbedView> {
     _pauseDebounceTimer?.cancel();
     _messageSub?.cancel();
     _progressPollTimer?.cancel();
+    _iframe?.style.pointerEvents = 'auto';
     _detachController(widget.controller);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Container(
-      width: 290,
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF0F172A) : Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.35)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.45 : 0.18),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(10, 6, 6, 4),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.smart_display_rounded, size: 16, color: Color(0xFFEF4444)),
-                    SizedBox(width: 5),
-                    Text(
-                      'YouTube Integrado',
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-                if (widget.onClose != null)
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded, size: 15),
-                    tooltip: 'Ocultar vídeo (áudio continua tocando)',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
-                    onPressed: widget.onClose,
-                  ),
-              ],
-            ),
-          ),
-          ClipRRect(
-            borderRadius: const BorderRadius.vertical(bottom: Radius.circular(13)),
-            child: SizedBox(
-              height: 163,
-              child: HtmlElementView(viewType: _viewType),
-            ),
-          ),
-        ],
-      ),
-    );
+    return HtmlElementView(viewType: _viewType);
   }
 }

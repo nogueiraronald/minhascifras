@@ -45,6 +45,10 @@ class _SongEditScreenState extends State<SongEditScreen> {
   late final FocusNode _contentFocusNode;
   late final FocusNode _audioFocusNode;
   final GlobalKey _audioKey = GlobalKey();
+  final ScrollController _categoryBarScrollController = ScrollController();
+  final ScrollController _chordBarScrollController = ScrollController();
+  final ScrollController _minorChordBarScrollController = ScrollController();
+  TextSelection _lastValidSelection = const TextSelection.collapsed(offset: 0);
   late bool _isFavorite;
   late List<String> _tags;
   bool _showChordBar = true;
@@ -97,6 +101,8 @@ class _SongEditScreenState extends State<SongEditScreen> {
     _audioFocusNode = FocusNode();
     _isFavorite = widget.song?.isFavorite ?? false;
     _tags = widget.song?.tags.toList() ?? [];
+    _lastValidSelection = TextSelection.collapsed(offset: _content.text.length);
+    _content.addListener(_preserveContentSelection);
 
     if (_originalKey.text.isEmpty && _content.text.isNotEmpty) {
       final detected = ChordTransposer.detectKey(_content.text);
@@ -106,8 +112,19 @@ class _SongEditScreenState extends State<SongEditScreen> {
     }
   }
 
+  void _preserveContentSelection() {
+    final sel = _content.selection;
+    if (sel.isValid && sel.start >= 0 && sel.end >= 0) {
+      _lastValidSelection = sel;
+    }
+  }
+
   @override
   void dispose() {
+    _content.removeListener(_preserveContentSelection);
+    _categoryBarScrollController.dispose();
+    _chordBarScrollController.dispose();
+    _minorChordBarScrollController.dispose();
     _title.dispose();
     _artist.dispose();
     _content.dispose();
@@ -208,40 +225,60 @@ class _SongEditScreenState extends State<SongEditScreen> {
   }
 
   void _insertSectionTag(String tag) {
-    final selection = _content.selection;
     final text = _content.text;
-    final insertText = '\n$tag\n';
+    final currentSel = _content.selection;
+    final activeSel = (currentSel.isValid && currentSel.start >= 0 && currentSel.end >= 0)
+        ? currentSel
+        : _lastValidSelection;
+    final insertText = text.isEmpty ? '$tag\n' : '\n$tag\n';
 
-    if (selection.isValid && selection.start >= 0 && selection.end >= 0) {
-      final newText = text.replaceRange(selection.start, selection.end, insertText);
+    if (activeSel.isValid && activeSel.start >= 0 && activeSel.end >= 0) {
+      final start = activeSel.start.clamp(0, text.length);
+      final end = activeSel.end.clamp(start, text.length);
+      final newText = text.replaceRange(start, end, insertText);
+      final newSelection = TextSelection.collapsed(offset: start + insertText.length);
+      _lastValidSelection = newSelection;
       _content.value = TextEditingValue(
         text: newText,
-        selection: TextSelection.collapsed(offset: selection.start + insertText.length),
+        selection: newSelection,
       );
     } else {
-      _content.text = text.isEmpty ? '$tag\n' : '$text$insertText';
+      final newText = text.isEmpty ? '$tag\n' : '$text$insertText';
+      final newSelection = TextSelection.collapsed(offset: newText.length);
+      _lastValidSelection = newSelection;
+      _content.value = TextEditingValue(
+        text: newText,
+        selection: newSelection,
+      );
     }
     _contentFocusNode.requestFocus();
   }
 
   void _insertChord(String chord) {
-    final selection = _content.selection;
     final text = _content.text;
+    final currentSel = _content.selection;
+    final activeSel = (currentSel.isValid && currentSel.start >= 0 && currentSel.end >= 0)
+        ? currentSel
+        : _lastValidSelection;
     final toInsert = '$chord ';
 
-    if (selection.isValid && selection.start >= 0 && selection.end >= 0) {
-      final start = selection.start;
-      final end = selection.end;
+    if (activeSel.isValid && activeSel.start >= 0 && activeSel.end >= 0) {
+      final start = activeSel.start.clamp(0, text.length);
+      final end = activeSel.end.clamp(start, text.length);
       final newText = text.replaceRange(start, end, toInsert);
+      final newSelection = TextSelection.collapsed(offset: start + toInsert.length);
+      _lastValidSelection = newSelection;
       _content.value = TextEditingValue(
         text: newText,
-        selection: TextSelection.collapsed(offset: start + toInsert.length),
+        selection: newSelection,
       );
     } else {
       final newText = text.isEmpty ? toInsert : '$text $toInsert';
+      final newSelection = TextSelection.collapsed(offset: newText.length);
+      _lastValidSelection = newSelection;
       _content.value = TextEditingValue(
         text: newText,
-        selection: TextSelection.collapsed(offset: newText.length),
+        selection: newSelection,
       );
     }
     _contentFocusNode.requestFocus();
@@ -854,6 +891,9 @@ class _SongEditScreenState extends State<SongEditScreen> {
         focusNode: _contentFocusNode,
         maxLines: null,
         minLines: 16,
+        onTapOutside: (_) {
+          // Mantém o foco e o cursor estáveis ao arrastar ou tocar na barra de acordes no celular
+        },
         onChanged: (_) {
           final newCount = _content.text.isEmpty ? 0 : _content.text.split('\n').length;
           if (newCount != lineCount) setState(() {});
@@ -1026,96 +1066,249 @@ class _SongEditScreenState extends State<SongEditScreen> {
   }
 
   /// Barra de Ferramentas Flutuante na parte inferior (acima do teclado)
+  /// Protegida com TextFieldTapRegion para não perder o foco, o cursor ou a
+  /// funcionalidade ao arrastar para o lado no celular.
   Widget _buildFloatingChordBar(bool isDark, Color borderColor) {
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark
-            ? const Color(0xFF0F172A).withValues(alpha: 0.95)
-            : Colors.white.withValues(alpha: 0.97),
-        border: Border(top: BorderSide(color: borderColor, width: 1.2)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.08),
-            blurRadius: 10,
-            offset: const Offset(0, -3),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Linha 1: Seletor de categorias e botão recolher
-              Row(
-                children: [
-                  const Icon(Icons.piano_rounded, size: 16, color: Color(0xFF6366F1)),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          _buildCategoryChip('Naturais', isDark),
-                          _buildCategoryChip('Com 7ª', isDark),
-                          _buildCategoryChip('Com Baixo', isDark),
-                          _buildCategoryChip('Sustenidos / Bemóis', isDark),
-                          _buildCategoryChip('Tags', isDark),
-                        ],
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobileCompact = screenWidth < 620;
+
+    return TextFieldTapRegion(
+      child: Container(
+        key: const ValueKey('floating_chord_bar'),
+        decoration: BoxDecoration(
+          color: isDark
+              ? const Color(0xFF0F172A).withValues(alpha: 0.95)
+              : Colors.white.withValues(alpha: 0.97),
+          border: Border(top: BorderSide(color: borderColor, width: 1.2)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.08),
+              blurRadius: 10,
+              offset: const Offset(0, -3),
+            ),
+          ],
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Linha 1: Seletor de categorias e botão recolher
+                Row(
+                  children: [
+                    const Icon(Icons.piano_rounded, size: 16, color: Color(0xFF6366F1)),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        key: const ValueKey('chord_categories_scroll'),
+                        controller: _categoryBarScrollController,
+                        scrollDirection: Axis.horizontal,
+                        physics: const BouncingScrollPhysics(
+                          parent: AlwaysScrollableScrollPhysics(),
+                        ),
+                        child: Row(
+                          children: [
+                            _buildCategoryChip('Naturais', isDark),
+                            _buildCategoryChip('Com 7ª', isDark),
+                            _buildCategoryChip('Com Baixo', isDark),
+                            _buildCategoryChip('Sustenidos / Bemóis', isDark),
+                            _buildCategoryChip('Tags', isDark),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 6),
-                  IconButton(
-                    icon: const Icon(Icons.keyboard_hide_rounded, size: 18),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
-                    tooltip: 'Ocultar barra de acordes',
-                    onPressed: () => setState(() => _showChordBar = false),
-                  ),
-                ],
+                    const SizedBox(width: 6),
+                    IconButton(
+                      icon: const Icon(Icons.keyboard_hide_rounded, size: 18),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+                      tooltip: 'Ocultar barra de acordes',
+                      onPressed: () => setState(() => _showChordBar = false),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 5),
+                // Linha 2: Acordes da categoria selecionada ou Tags
+                _buildResponsiveChordRows(isDark, borderColor, isMobileCompact),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResponsiveChordRows(bool isDark, Color borderColor, bool isMobileCompact) {
+    if (!isMobileCompact) {
+      return SingleChildScrollView(
+        key: const ValueKey('chord_buttons_scroll'),
+        controller: _chordBarScrollController,
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(
+          parent: AlwaysScrollableScrollPhysics(),
+        ),
+        child: _selectedChordCategory == 'Tags'
+            ? Row(children: _sectionTags.map((t) => _buildTagButton(t, isDark)).toList())
+            : _buildChordButtonsRow(isDark, borderColor),
+      );
+    }
+
+    // No celular (< 620px), organiza os acordes em 2 linhas compactas e roláveis
+    // para que todos os acordes fiquem acessíveis sem sumir ao arrastar para o lado
+    Widget row1;
+    Widget row2;
+
+    switch (_selectedChordCategory) {
+      case 'Com 7ª':
+        final firstHalf = _sevenths.sublist(0, 7);
+        final secondHalf = _sevenths.sublist(7);
+        row1 = Row(
+          children: firstHalf
+              .map((c) => _buildChordButton(c, isDark: isDark, isMajor: !c.contains('m')))
+              .toList(),
+        );
+        row2 = Row(
+          children: secondHalf
+              .map((c) => _buildChordButton(c, isDark: isDark, isMajor: !c.contains('m')))
+              .toList(),
+        );
+        break;
+      case 'Com Baixo':
+        final firstHalf = _slashChords.sublist(0, 5);
+        final secondHalf = _slashChords.sublist(5);
+        row1 = Row(
+          children: firstHalf
+              .map((c) => _buildChordButton(c, isDark: isDark, isMajor: true))
+              .toList(),
+        );
+        row2 = Row(
+          children: secondHalf
+              .map((c) => _buildChordButton(c, isDark: isDark, isMajor: true))
+              .toList(),
+        );
+        break;
+      case 'Sustenidos / Bemóis':
+        final firstHalf = _accidentals.sublist(0, 5);
+        final secondHalf = _accidentals.sublist(5);
+        row1 = Row(
+          children: firstHalf
+              .map((c) => _buildChordButton(c, isDark: isDark, isMajor: !c.contains('m')))
+              .toList(),
+        );
+        row2 = Row(
+          children: secondHalf
+              .map((c) => _buildChordButton(c, isDark: isDark, isMajor: !c.contains('m')))
+              .toList(),
+        );
+        break;
+      case 'Tags':
+        final firstHalf = _sectionTags.sublist(0, 4);
+        final secondHalf = _sectionTags.sublist(4);
+        row1 = Row(children: firstHalf.map((t) => _buildTagButton(t, isDark)).toList());
+        row2 = Row(children: secondHalf.map((t) => _buildTagButton(t, isDark)).toList());
+        break;
+      case 'Naturais':
+      default:
+        row1 = Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFF4F46E5).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(4),
               ),
-              const SizedBox(height: 5),
-              // Linha 2: Acordes da categoria selecionada ou Tags
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: _selectedChordCategory == 'Tags'
-                    ? Row(
-                        children: _sectionTags.map((tag) {
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 6),
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(6),
-                              onTap: () => _insertSectionTag(tag),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: isDark
-                                      ? const Color(0xFF334155).withValues(alpha: 0.5)
-                                      : const Color(0xFFF1F5F9),
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(
-                                    color: isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1),
-                                  ),
-                                ),
-                                child: Text(
-                                  tag,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: isDark ? Colors.grey[200] : Colors.grey[800],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      )
-                    : _buildChordButtonsRow(isDark, borderColor),
+              child: const Text(
+                'Maiores',
+                style: TextStyle(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF4F46E5),
+                ),
               ),
-            ],
+            ),
+            const SizedBox(width: 5),
+            ..._majorNaturals.map((c) => _buildChordButton(c, isDark: isDark, isMajor: true)),
+          ],
+        );
+        row2 = Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFF7E22CE).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Text(
+                'Menores',
+                style: TextStyle(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF7E22CE),
+                ),
+              ),
+            ),
+            const SizedBox(width: 5),
+            ..._minorNaturals.map((c) => _buildChordButton(c, isDark: isDark, isMajor: false)),
+          ],
+        );
+        break;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SingleChildScrollView(
+          key: const ValueKey('chord_buttons_scroll'),
+          controller: _chordBarScrollController,
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
+          ),
+          child: row1,
+        ),
+        const SizedBox(height: 4),
+        SingleChildScrollView(
+          key: const ValueKey('chord_buttons_minor_scroll'),
+          controller: _minorChordBarScrollController,
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
+          ),
+          child: row2,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTagButton(String tag, bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: InkWell(
+        canRequestFocus: false,
+        borderRadius: BorderRadius.circular(6),
+        onTap: () => _insertSectionTag(tag),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: isDark
+                ? const Color(0xFF334155).withValues(alpha: 0.5)
+                : const Color(0xFFF1F5F9),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1),
+            ),
+          ),
+          child: Text(
+            tag,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: isDark ? Colors.grey[200] : Colors.grey[800],
+            ),
           ),
         ),
       ),
@@ -1444,8 +1637,17 @@ class _SongEditScreenState extends State<SongEditScreen> {
     return Padding(
       padding: const EdgeInsets.only(right: 5),
       child: InkWell(
+        canRequestFocus: false,
         borderRadius: BorderRadius.circular(12),
-        onTap: () => setState(() => _selectedChordCategory = category),
+        onTap: () {
+          setState(() => _selectedChordCategory = category);
+          if (_chordBarScrollController.hasClients) {
+            _chordBarScrollController.jumpTo(0);
+          }
+          if (_minorChordBarScrollController.hasClients) {
+            _minorChordBarScrollController.jumpTo(0);
+          }
+        },
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
@@ -1544,28 +1746,27 @@ class _SongEditScreenState extends State<SongEditScreen> {
 
     return Padding(
       padding: const EdgeInsets.only(right: 5),
-      child: Tooltip(
-        message: 'Inserir $chord na posição do cursor',
-        child: InkWell(
-          borderRadius: BorderRadius.circular(6),
-          onTap: () => _insertChord(chord),
-          child: Container(
-            constraints: const BoxConstraints(minWidth: 30),
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-            decoration: BoxDecoration(
-              color: bg,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: border),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              chord,
-              style: TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 11.5,
-                fontWeight: FontWeight.bold,
-                color: textColor,
-              ),
+      child: InkWell(
+        key: ValueKey('chord_chip_$chord'),
+        canRequestFocus: false,
+        borderRadius: BorderRadius.circular(6),
+        onTap: () => _insertChord(chord),
+        child: Container(
+          constraints: const BoxConstraints(minWidth: 30),
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: border),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            chord,
+            style: TextStyle(
+              fontFamily: 'monospace',
+              fontSize: 11.5,
+              fontWeight: FontWeight.bold,
+              color: textColor,
             ),
           ),
         ),
