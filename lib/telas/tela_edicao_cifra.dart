@@ -444,7 +444,8 @@ class _SongEditScreenState extends State<SongEditScreen> {
 
     final key = _originalKey.text.trim();
     final audio = Song.cleanAudioUrl(_audioUrl.text.trim());
-    final durationSeconds = Song.parseDuration(_audioDuration.text);
+    final hasValidAudio = audio != null && audio.isNotEmpty;
+    final durationSeconds = hasValidAudio ? Song.parseDuration(_audioDuration.text) : null;
     final old = widget.song;
     final song = old == null
         ? Song(
@@ -455,7 +456,7 @@ class _SongEditScreenState extends State<SongEditScreen> {
             originalKey: key.isNotEmpty ? key : (ChordTransposer.detectKey(_content.text) ?? ''),
             isFavorite: _isFavorite,
             tags: _tags,
-            audioUrl: (audio != null && audio.isNotEmpty) ? audio : null,
+            audioUrl: hasValidAudio ? audio : null,
             audioDurationSeconds: durationSeconds,
           )
         : old.copyWith(
@@ -465,12 +466,16 @@ class _SongEditScreenState extends State<SongEditScreen> {
             originalKey: key.isNotEmpty ? key : old.originalKey,
             isFavorite: _isFavorite,
             tags: _tags,
-            audioUrl: (audio != null && audio.isNotEmpty) ? audio : null,
+            audioUrl: hasValidAudio ? audio : null,
             audioDurationSeconds: durationSeconds,
           );
 
     await widget.repository.save(song);
     if (!mounted) return;
+
+    final savedInRepo = widget.repository.allSongs
+        .where((s) => s.id == song.id)
+        .firstOrNull ?? song;
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -478,7 +483,7 @@ class _SongEditScreenState extends State<SongEditScreen> {
         backgroundColor: const Color(0xFF10B981),
       ),
     );
-    Navigator.pop(context, song);
+    Navigator.pop(context, savedInRepo);
   }
 
   @override
@@ -1435,7 +1440,7 @@ class _SongEditScreenState extends State<SongEditScreen> {
                   ],
                 ),
               ),
-              // Botões Rápidos de Ação: Colar Link e Carregar MP3
+              // Botões Rápidos de Ação: Colar Link, Remover Link e Carregar MP3
               Wrap(
                 spacing: 6,
                 runSpacing: 4,
@@ -1452,6 +1457,25 @@ class _SongEditScreenState extends State<SongEditScreen> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
                   ),
+                  if (url.isNotEmpty)
+                    OutlinedButton.icon(
+                      key: const ValueKey('remove_audio_link_btn'),
+                      onPressed: () {
+                        setState(() {
+                          _audioUrl.clear();
+                          _audioDuration.clear();
+                        });
+                      },
+                      icon: const Icon(Icons.link_off_rounded, size: 13),
+                      label: const Text('Remover Link', style: TextStyle(fontSize: 11)),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                        visualDensity: VisualDensity.compact,
+                        side: BorderSide(color: Colors.redAccent.withValues(alpha: 0.5)),
+                        foregroundColor: Colors.redAccent,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
                   ElevatedButton.icon(
                     onPressed: _pickMp3File,
                     icon: const Icon(Icons.folder_open_rounded, size: 13),
@@ -1473,6 +1497,7 @@ class _SongEditScreenState extends State<SongEditScreen> {
 
           // Campo Principal: URL ou Arquivo de Áudio
           TextField(
+            key: const ValueKey('edit_song_audio_url_field'),
             controller: _audioUrl,
             focusNode: _audioFocusNode,
             style: const TextStyle(fontSize: 12.5),
@@ -1495,10 +1520,16 @@ class _SongEditScreenState extends State<SongEditScreen> {
                 children: [
                   if (_audioUrl.text.isNotEmpty)
                     IconButton(
+                      key: const ValueKey('clear_audio_url_btn'),
                       icon: const Icon(Icons.clear_rounded, size: 16),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                      onPressed: () => setState(() => _audioUrl.clear()),
+                      onPressed: () {
+                        setState(() {
+                          _audioUrl.clear();
+                          _audioDuration.clear();
+                        });
+                      },
                       tooltip: 'Limpar link',
                     ),
                   IconButton(

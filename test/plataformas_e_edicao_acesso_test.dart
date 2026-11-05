@@ -13,6 +13,23 @@ import 'package:cifras_app/telas/tela_edicao_cifra.dart';
 import 'package:cifras_app/servicos/controlador_audio_karaoke.dart';
 import 'package:cifras_app/servicos/servico_wakelock.dart';
 import 'package:cifras_app/componentes/player_youtube_embutido.dart';
+import 'package:cifras_app/componentes/barra_player_karaoke.dart';
+import 'package:cifras_app/servicos/dados_nuvem.dart';
+import 'package:cifras_app/servicos/servico_supabase_sync.dart';
+
+class _FakeSupabaseSync extends SupabaseSyncService {
+  CloudData remoteData = const CloudData();
+  CloudData? lastWrittenData;
+
+  @override
+  Future<CloudData> readAll(String syncCode) async => remoteData;
+
+  @override
+  Future<void> writeAll(String syncCode, CloudData data) async {
+    remoteData = data;
+    lastWrittenData = data;
+  }
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -546,6 +563,88 @@ void main() {
       // Verifica que o acorde foi inserido exatamente na posição do cursor (início do texto), sem perder o uso!
       expect(textField.controller!.text.startsWith('Am7 '), isTrue);
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Remoção do link salva com sucesso, remove o player da exibição e sincroniza null no Supabase', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        'supabase_sync_code': 'MC-LINKRM1',
+      });
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final repo = await SongRepository.open();
+      final chords = await ChordLibrary.open();
+      final account = await AccountController.open();
+      final setlists = await SetlistRepository.open();
+      final musicThemes = await ThemeRepository.open();
+      final fakeSupabase = _FakeSupabaseSync();
+
+      final initialSong = Song(
+        id: 'barca-1',
+        title: 'A Barca',
+        artist: 'Padre Zezinho',
+        originalKey: 'D',
+        content: 'D A/C# Bm\nTu, te abeiraste da praia',
+        audioUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        audioDurationSeconds: 210,
+      );
+      fakeSupabase.remoteData = CloudData(songs: [initialSong]);
+      await repo.save(initialSong);
+
+      final sync = SyncService(repo, setlists, account, supabaseSync: fakeSupabase);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MainScreen(
+            repository: repo,
+            chords: chords,
+            account: account,
+            sync: sync,
+            setlists: setlists,
+            musicThemes: musicThemes,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle(const Duration(milliseconds: 500));
+
+      // Confirma que inicialmente o mini player e a barra de karaokê estão visíveis na exibição
+      expect(find.byType(PlayerYoutubeEmbutido), findsOneWidget);
+      expect(find.byType(BarraPlayerKaraoke), findsOneWidget);
+
+      // Abre a tela de edição da cifra atual
+      await tester.tap(find.byTooltip('Editar cifra'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SongEditScreen), findsOneWidget);
+
+      // Remove o link clicando no botão de limpar/remover link
+      final removeLinkBtn = find.byKey(const ValueKey('remove_audio_link_btn'));
+      await tester.ensureVisible(removeLinkBtn);
+      await tester.pumpAndSettle();
+      await tester.tap(removeLinkBtn);
+      await tester.pumpAndSettle();
+
+      // Salva a cifra
+      await tester.tap(find.text('Salvar'));
+      await tester.pumpAndSettle(const Duration(milliseconds: 600));
+
+      // 1. Verifica que o link foi removido do repositório local
+      final updatedInRepo = repo.songs.firstWhere((s) => s.id == 'barca-1');
+      expect(updatedInRepo.audioUrl, isNull);
+      expect(updatedInRepo.audioDurationSeconds, isNull);
+      expect(updatedInRepo.hasAudio, isFalse);
+
+      // 2. Verifica que o mini player e a barra de áudio sumiram imediatamente da exibição
+      expect(find.byType(PlayerYoutubeEmbutido), findsNothing);
+      expect(find.byType(BarraPlayerKaraoke), findsNothing);
+
+      // 3. Verifica que a remoção foi enviada ao Supabase com audioUrl == null
+      expect(fakeSupabase.lastWrittenData, isNotNull);
+      final syncedSong = fakeSupabase.lastWrittenData!.songs.firstWhere((s) => s.id == 'barca-1');
+      expect(syncedSong.audioUrl, isNull);
+      expect(syncedSong.audioDurationSeconds, isNull);
+      expect(syncedSong.toJson()['audioUrl'], isNull);
     });
   });
 }

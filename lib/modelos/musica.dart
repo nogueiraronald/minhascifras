@@ -116,6 +116,15 @@ class Song {
     return int.tryParse(trimmed);
   }
 
+  static const Object _unset = Object();
+
+  static DateTime _nextUpdatedAt(DateTime previous, DateTime? explicit) {
+    if (explicit != null) return explicit;
+    final now = DateTime.now();
+    if (now.isAfter(previous)) return now;
+    return previous.add(const Duration(seconds: 1));
+  }
+
   Song copyWith({
     String? id,
     String? title,
@@ -124,8 +133,8 @@ class Song {
     String? originalKey,
     bool? isFavorite,
     List<String>? tags,
-    String? audioUrl,
-    int? audioDurationSeconds,
+    Object? audioUrl = _unset,
+    Object? audioDurationSeconds = _unset,
     DateTime? updatedAt,
     bool? deleted,
   }) {
@@ -137,9 +146,11 @@ class Song {
       originalKey: originalKey ?? this.originalKey,
       isFavorite: isFavorite ?? this.isFavorite,
       tags: tags ?? this.tags,
-      audioUrl: audioUrl ?? this.audioUrl,
-      audioDurationSeconds: audioDurationSeconds ?? this.audioDurationSeconds,
-      updatedAt: updatedAt ?? DateTime.now(),
+      audioUrl: identical(audioUrl, _unset) ? this.audioUrl : audioUrl as String?,
+      audioDurationSeconds: identical(audioDurationSeconds, _unset)
+          ? this.audioDurationSeconds
+          : audioDurationSeconds as int?,
+      updatedAt: _nextUpdatedAt(this.updatedAt, updatedAt),
       deleted: deleted ?? this.deleted,
     );
   }
@@ -152,8 +163,8 @@ class Song {
         'originalKey': originalKey,
         'isFavorite': isFavorite,
         'tags': tags,
-        if (audioUrl != null) 'audioUrl': audioUrl,
-        if (audioDurationSeconds != null) 'audioDurationSeconds': audioDurationSeconds,
+        'audioUrl': audioUrl,
+        'audioDurationSeconds': audioDurationSeconds,
         'updatedAt': updatedAt.toIso8601String(),
         'deleted': deleted,
       };

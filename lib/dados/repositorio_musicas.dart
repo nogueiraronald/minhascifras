@@ -30,6 +30,7 @@ class SongRepository extends ChangeNotifier {
               return s.copyWith(
                 content: ChordTransposer.cleanText(s.content),
                 audioUrl: Song.cleanAudioUrl(s.audioUrl),
+                updatedAt: s.updatedAt,
               );
             })
             .toList();
@@ -55,7 +56,15 @@ class SongRepository extends ChangeNotifier {
     final i = _songs.indexWhere((s) =>
         s.id == cleanSong.id || (!s.deleted && normKey(s.title, s.artist) == key));
     if (i >= 0) {
-      _songs[i] = cleanSong.copyWith(id: _songs[i].id, deleted: false);
+      final prevUpdatedAt = _songs[i].updatedAt;
+      final nextUpdatedAt = cleanSong.updatedAt.isAfter(prevUpdatedAt)
+          ? cleanSong.updatedAt
+          : prevUpdatedAt.add(const Duration(seconds: 1));
+      _songs[i] = cleanSong.copyWith(
+        id: _songs[i].id,
+        deleted: false,
+        updatedAt: nextUpdatedAt,
+      );
     } else {
       _songs.add(cleanSong);
     }
@@ -70,7 +79,15 @@ class SongRepository extends ChangeNotifier {
       final i = _songs.indexWhere((s) =>
           s.id == cleanSong.id || (!s.deleted && normKey(s.title, s.artist) == key));
       if (i >= 0) {
-        _songs[i] = cleanSong.copyWith(id: _songs[i].id, deleted: false);
+        final prevUpdatedAt = _songs[i].updatedAt;
+        final nextUpdatedAt = cleanSong.updatedAt.isAfter(prevUpdatedAt)
+            ? cleanSong.updatedAt
+            : prevUpdatedAt.add(const Duration(seconds: 1));
+        _songs[i] = cleanSong.copyWith(
+          id: _songs[i].id,
+          deleted: false,
+          updatedAt: nextUpdatedAt,
+        );
       } else {
         _songs.add(cleanSong);
       }
@@ -249,6 +266,7 @@ class SongRepository extends ChangeNotifier {
             title: newTitle,
             artist: newArtist,
             originalKey: newKey,
+            updatedAt: s.updatedAt,
           );
           updatedCount++;
         }

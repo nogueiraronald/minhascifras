@@ -129,12 +129,16 @@ class _MainScreenState extends State<MainScreen> {
   void _initKaraokeController(Song? song) {
     _karaokeController?.dispose();
     _karaokeController = null;
-    _showYoutubeVideo = true;
     if (song != null && song.hasAudio) {
+      _showYoutubeVideo = true;
+      _showKaraokePlayer = true;
       _karaokeController = KaraokeAudioController(
         song: song,
         scrollController: _scrollController,
       );
+    } else {
+      _showYoutubeVideo = false;
+      _showKaraokePlayer = false;
     }
   }
 
@@ -349,8 +353,13 @@ class _MainScreenState extends State<MainScreen> {
           widget.repository.allSongs.where((s) => s.id == targetId);
       if (fresh.isNotEmpty) {
         final updated = fresh.first;
-        setState(() => _currentSong = updated);
-        _initKaraokeController(updated);
+        setState(() {
+          _currentSong = updated;
+          _initKaraokeController(updated);
+        });
+      }
+      if (savedSong != null) {
+        unawaited(widget.sync.sync());
       }
     }
   }
@@ -1735,19 +1744,30 @@ class _MainScreenState extends State<MainScreen> {
 
   // --- Interface do Músico (Reader) ---
   Widget _buildMusicianReader(bool isMobile) {
-    // Validação reativa: se a música atual foi apagada da biblioteca, descarrega imediatamente
-    if (_currentSong != null &&
-        !widget.repository.songs.any((s) => s.id == _currentSong!.id)) {
-      final available = _getVisibleSongs();
-      if (available.isNotEmpty) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _selectSong(available.first);
-        });
-      } else {
-        _currentSong = null;
-        _currentSetlistItem = null;
-        _transpose = 0;
-        _initKaraokeController(null);
+    // Validação reativa: mantém _currentSong sincronizada com o repositório ou descarrega se foi apagada
+    if (_currentSong != null) {
+      final latestInRepo = widget.repository.songs
+          .where((s) => s.id == _currentSong!.id)
+          .firstOrNull;
+      if (latestInRepo == null) {
+        final available = _getVisibleSongs();
+        if (available.isNotEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _selectSong(available.first);
+          });
+        } else {
+          _currentSong = null;
+          _currentSetlistItem = null;
+          _transpose = 0;
+          _initKaraokeController(null);
+        }
+      } else if (!identical(latestInRepo, _currentSong)) {
+        final audioChanged = latestInRepo.audioUrl != _currentSong!.audioUrl ||
+            latestInRepo.audioDurationSeconds != _currentSong!.audioDurationSeconds;
+        _currentSong = latestInRepo;
+        if (audioChanged) {
+          _initKaraokeController(latestInRepo);
+        }
       }
     }
 
@@ -4289,8 +4309,13 @@ class _MainScreenState extends State<MainScreen> {
                                             .where((s) => s.id == targetId);
                                         if (fresh.isNotEmpty && mounted) {
                                           final updated = fresh.first;
-                                          setState(() => _currentSong = updated);
-                                          _initKaraokeController(updated);
+                                          setState(() {
+                                            _currentSong = updated;
+                                            _initKaraokeController(updated);
+                                          });
+                                          if (savedSong != null) {
+                                            unawaited(widget.sync.sync());
+                                          }
                                         }
                                       } else if (val == 'delete') {
                                         final confirm = await _confirmDeletion(

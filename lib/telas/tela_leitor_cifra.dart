@@ -63,13 +63,16 @@ class _SongReaderScreenState extends State<SongReaderScreen> {
 
   void _initKaraoke(Song song) {
     _karaokeController?.dispose();
-    _showYoutubeVideo = true;
     if (song.hasAudio) {
+      _showYoutubeVideo = true;
+      _showKaraokePlayer = true;
       _karaokeController = KaraokeAudioController(
         song: song,
         scrollController: _scroll,
       );
     } else {
+      _showYoutubeVideo = false;
+      _showKaraokePlayer = false;
       _karaokeController = null;
     }
   }
