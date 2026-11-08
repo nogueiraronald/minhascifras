@@ -181,7 +181,15 @@ class SyncService extends ChangeNotifier {
     // Sempre envia o backup na primeira sincronização ou quando houver novidades locais ou senha alterada
     final isFirstUpload = remote.songs.isEmpty && _songs.songs.isNotEmpty;
     final passwordChanged = _account.passwordHash != remote.passwordHash;
-    if (songPush || setlistPush || itemPush || isFirstUpload || passwordChanged) {
+    final nicknameChanged = _account.userNickname != null &&
+        _account.userNickname!.isNotEmpty &&
+        _account.userNickname != remote.nickname;
+    if ((_account.userNickname == null || _account.userNickname!.isEmpty) &&
+        remote.nickname != null &&
+        remote.nickname!.isNotEmpty) {
+      await _account.setNickname(remote.nickname!);
+    }
+    if (songPush || setlistPush || itemPush || isFirstUpload || passwordChanged || nicknameChanged) {
       await _supabaseSync.writeAll(
         code,
         CloudData(
@@ -193,6 +201,7 @@ class SyncService extends ChangeNotifier {
           deletedSetlistIds: allDeletedSetlistIds,
           deletedItemIds: allDeletedItemIds,
           passwordHash: _account.passwordHash,
+          nickname: _account.userNickname ?? remote.nickname,
         ),
       );
     }

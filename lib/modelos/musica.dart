@@ -9,6 +9,7 @@ class Song {
     this.tags = const [],
     this.audioUrl,
     this.audioDurationSeconds,
+    this.imageUrl,
     DateTime? updatedAt,
     this.deleted = false,
   }) : updatedAt = updatedAt ?? DateTime.now();
@@ -22,10 +23,12 @@ class Song {
   final List<String> tags;
   final String? audioUrl;
   final int? audioDurationSeconds;
+  final String? imageUrl;
   final DateTime updatedAt;
   final bool deleted;
 
   bool get hasAudio => audioUrl != null && audioUrl!.trim().isNotEmpty;
+  bool get hasImage => imageUrl != null && imageUrl!.trim().isNotEmpty;
 
   /// Retorna o tipo de áudio ('youtube', 'mp3', ou 'none')
   String get audioType {
@@ -135,6 +138,7 @@ class Song {
     List<String>? tags,
     Object? audioUrl = _unset,
     Object? audioDurationSeconds = _unset,
+    Object? imageUrl = _unset,
     DateTime? updatedAt,
     bool? deleted,
   }) {
@@ -150,6 +154,7 @@ class Song {
       audioDurationSeconds: identical(audioDurationSeconds, _unset)
           ? this.audioDurationSeconds
           : audioDurationSeconds as int?,
+      imageUrl: identical(imageUrl, _unset) ? this.imageUrl : imageUrl as String?,
       updatedAt: _nextUpdatedAt(this.updatedAt, updatedAt),
       deleted: deleted ?? this.deleted,
     );
@@ -165,6 +170,8 @@ class Song {
         'tags': tags,
         'audioUrl': audioUrl,
         'audioDurationSeconds': audioDurationSeconds,
+        if (imageUrl != null && imageUrl!.trim().isNotEmpty)
+          'imageUrl': imageUrl,
         'updatedAt': updatedAt.toIso8601String(),
         'deleted': deleted,
       };
@@ -179,6 +186,7 @@ class Song {
         tags: (j['tags'] as List?)?.map((e) => e.toString()).toList() ?? const [],
         audioUrl: j['audioUrl'] as String?,
         audioDurationSeconds: (j['audioDurationSeconds'] as num?)?.toInt(),
+        imageUrl: j['imageUrl'] as String?,
         updatedAt: DateTime.tryParse((j['updatedAt'] as String?) ?? ''),
         deleted: (j['deleted'] as bool?) ?? false,
       );

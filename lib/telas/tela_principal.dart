@@ -13,6 +13,7 @@ import '../dados/repositorio_musicas.dart';
 import '../modelos/lista_repertorio.dart';
 import '../modelos/item_lista_repertorio.dart';
 import '../modelos/musica.dart';
+import '../modelos/musica_comunidade.dart';
 import '../servicos/transpositor_acordes.dart';
 import '../dados/controlador_tema.dart';
 import '../dados/repositorio_temas.dart';
@@ -37,7 +38,9 @@ import '../servicos/controlador_audio_karaoke.dart';
 import '../componentes/barra_player_karaoke.dart';
 import '../componentes/player_youtube_embutido.dart';
 import '../servicos/servico_atualizacao_pwa.dart';
+import '../servicos/servico_comunidade.dart';
 import '../servicos/servico_wakelock.dart';
+import 'tela_comunidade.dart';
 
 /// Modos de exibição da música: Cifra completa, Letra pura ou Partitura musical.
 enum SongDisplayMode {
@@ -56,6 +59,7 @@ class MainScreen extends StatefulWidget {
     required this.setlists,
     required this.musicThemes,
     this.theme,
+    this.communityService,
   });
 
   final SongRepository repository;
@@ -65,6 +69,7 @@ class MainScreen extends StatefulWidget {
   final SetlistRepository setlists;
   final ThemeRepository musicThemes;
   final ThemeController? theme;
+  final CommunityService? communityService;
 
   @override
   State<MainScreen> createState() => _MainScreenState();
@@ -94,6 +99,13 @@ class _MainScreenState extends State<MainScreen> {
       FocusNode(debugLabel: 'SetlistSearchFieldFocus');
   String _setlistSearchQuery = '';
   final ScrollController _setlistsListController = ScrollController();
+
+  // Comunidade: Cifras compartilhadas pelo usuário atual
+  late final CommunityService _communityService =
+      widget.communityService ?? CommunityService();
+  List<CommunitySong> _mySharedSongs = [];
+  bool _isLoadingSharedSongs = false;
+  bool _isSharedSectionExpanded = true;
 
   // Seleção e visualização da cifra
   Song? _currentSong;
@@ -172,6 +184,7 @@ class _MainScreenState extends State<MainScreen> {
     ServicoWakeLock.manterTelaAtiva(true);
     _loadUserPreferences();
     widget.account.addListener(_checkAccountLock);
+    widget.account.addListener(_loadMySharedSongs);
     _searchController.addListener(() {
       setState(() {
         _searchQuery = _searchController.text.trim().toLowerCase();
@@ -194,6 +207,7 @@ class _MainScreenState extends State<MainScreen> {
       widget.setlists.cleanupOrphanedItems(activeSongIds);
       _ensureFirstSongSelected();
       _checkAccountLock();
+      _loadMySharedSongs();
     });
   }
 
@@ -201,6 +215,7 @@ class _MainScreenState extends State<MainScreen> {
   void dispose() {
     ServicoWakeLock.manterTelaAtiva(false);
     widget.account.removeListener(_checkAccountLock);
+    widget.account.removeListener(_loadMySharedSongs);
     _karaokeController?.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
@@ -1025,7 +1040,102 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  // --- Ações de Criação e Setlists ---
+  // --- Ações de Criação, Comunidade e Setlists ---
+  Future<void> _loadMySharedSongs() async {
+    final email = widget.account.email?.trim().toLowerCase() ?? '';
+    if (email.isEmpty) {
+      if (mounted) setState(() => _mySharedSongs = []);
+      return;
+    }
+    if (_isLoadingSharedSongs) return;
+    _isLoadingSharedSongs = true;
+    try {
+      final all = await _communityService.fetchCommunitySongs();
+      if (mounted) {
+        setState(() {
+          _mySharedSongs = all
+              .where((item) => item.sharedByEmail.trim().toLowerCase() == email)
+              .toList();
+        });
+      }
+    } catch (_) {
+      // Ignora erro de rede temporário
+    } finally {
+      if (mounted) {
+        _isLoadingSharedSongs = false;
+      }
+    }
+  }
+
+  Future<void> _shareToCommunity([List<Song>? initialSongs]) async {
+    await TelaComunidade.compartilharMusicas(
+      context: context,
+      account: widget.account,
+      repository: widget.repository,
+      sync: widget.sync,
+      communityService: widget.communityService,
+      initialSelectedSongIds:
+          initialSongs?.map((s) => s.id).toList() ?? const [],
+    );
+    await _loadMySharedSongs();
+  }
+
+  Future<void> _confirmUnpublishSharedSong(CommunitySong item) async {
+    final email = widget.account.email?.trim() ?? '';
+    if (email.isEmpty) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remover da Comunidade'),
+        content: Text(
+          'Deseja remover "${item.song.title}" da comunidade?\n\n'
+          'Os usuários que já importaram a cifra continuarão com a cópia deles, mas ela não ficará mais visível para novos usuários.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Remover'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await _communityService.unpublishSong(
+          target: item,
+          userEmail: email,
+        );
+        await _loadMySharedSongs();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                  'Cifra "${item.song.title}" removida da comunidade com sucesso.'),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Erro ao remover da comunidade: $e'),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
+      }
+    }
+  }
+
   Future<void> _createManualSong() async {
     final created = await Navigator.push<Song>(
       context,
@@ -2512,8 +2622,249 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+  Widget _buildSharedToCommunitySection(bool isDark) {
+    final email = widget.account.email?.trim() ?? '';
+    if (email.isEmpty) {
+      return Container(
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: isDark
+              ? const Color(0xFF1E293B)
+              : Colors.purple.shade50.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: AppCores.roxo.withValues(alpha: 0.25),
+          ),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.public, color: AppCores.roxo, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Faça login com e-mail para ver suas cifras compartilhadas na comunidade.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? Colors.grey[300] : Colors.grey[700],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final totalImports = _mySharedSongs.fold<int>(
+      0,
+      (sum, item) => sum + item.importCount,
+    );
+
+    return Container(
+      key: const ValueKey('section_my_community_shares'),
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: AppCores.roxo.withValues(alpha: isDark ? 0.35 : 0.25),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppCores.roxo.withValues(alpha: 0.08),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: _isSharedSectionExpanded,
+          onExpansionChanged: (expanded) {
+            setState(() => _isSharedSectionExpanded = expanded);
+          },
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          leading: Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              gradient: AppCores.gradienteBotao,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.public_rounded,
+              color: Colors.white,
+              size: 18,
+            ),
+          ),
+          title: const Text(
+            'Compartilhadas na Comunidade',
+            style: TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          subtitle: Text(
+            _isLoadingSharedSongs
+                ? 'Atualizando...'
+                : '${_mySharedSongs.length} cifra(s) • $totalImports import(s)',
+            style: TextStyle(
+              fontSize: 11.5,
+              color: isDark ? Colors.grey[400] : Colors.grey[600],
+            ),
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                tooltip: 'Atualizar imports',
+                visualDensity: VisualDensity.compact,
+                onPressed: _loadMySharedSongs,
+              ),
+              Icon(
+                _isSharedSectionExpanded
+                    ? Icons.keyboard_arrow_up_rounded
+                    : Icons.keyboard_arrow_down_rounded,
+                color: AppCores.roxo,
+              ),
+            ],
+          ),
+          children: [
+            if (_mySharedSongs.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  'Você ainda não compartilhou cifras com a comunidade.\nToque no menu (⋮) de qualquer cifra na sua lista para compartilhar.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? Colors.grey[400] : Colors.grey[600],
+                  ),
+                ),
+              )
+            else
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                itemCount: _mySharedSongs.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, idx) {
+                  final item = _mySharedSongs[idx];
+                  return ListTile(
+                    dense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    leading: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        gradient: AppCores.gradienteBotao,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.music_note_rounded,
+                        color: Colors.white,
+                        size: 16,
+                      ),
+                    ),
+                    title: Text(
+                      item.song.title,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      item.song.artist.isNotEmpty
+                          ? item.song.artist
+                          : 'Compartilhada em ${item.formattedDate}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDark ? Colors.grey[400] : Colors.grey[600],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Badge de Imports elegante
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppCores.roxo
+                                .withValues(alpha: isDark ? 0.25 : 0.12),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: AppCores.roxo.withValues(alpha: 0.4),
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.download_rounded,
+                                size: 12,
+                                color: AppCores.roxo,
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                '${item.importCount} import(s)',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppCores.roxo,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        IconButton(
+                          tooltip: 'Remover da comunidade',
+                          icon: const Icon(
+                            Icons.delete_outline_rounded,
+                            size: 18,
+                            color: Colors.redAccent,
+                          ),
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () => _confirmUnpublishSharedSong(item),
+                        ),
+                      ],
+                    ),
+                    onTap: () {
+                      final local = widget.repository.songs
+                          .where((s) => s.id == item.song.id)
+                          .firstOrNull;
+                      if (local != null) {
+                        _selectSong(local);
+                      } else {
+                        _selectSong(item.song);
+                      }
+                    },
+                  );
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // --- Catálogo e Navegação de Listas (mesmo padrão dos Temas) ---
   Widget _buildSetlistsView() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final allSetlists = widget.setlists.setlists;
     final filteredSetlists = _setlistSearchQuery.isEmpty
         ? allSetlists
@@ -2592,6 +2943,9 @@ class _MainScreenState extends State<MainScreen> {
             ),
           ),
         ),
+
+        // Cifras Compartilhadas na Comunidade pelo Usuário
+        if (_setlistSearchQuery.isEmpty) _buildSharedToCommunitySection(isDark),
 
         // Lista de Setlists Agrupada por Letra com Barra Alfabética à Direita
         Expanded(
@@ -3205,7 +3559,7 @@ class _MainScreenState extends State<MainScreen> {
       children: [
         // Cabeçalho da Barra Lateral
         Container(
-          padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+          padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
           decoration: BoxDecoration(
             color: Theme.of(context)
                 .colorScheme
@@ -3219,11 +3573,27 @@ class _MainScreenState extends State<MainScreen> {
             children: [
               Row(
                 children: [
-                  const Expanded(
-                    child: AppLogo(),
+                  if (Navigator.canPop(context)) ...[
+                    BotaoVoltarInicio(
+                      iconSize: 24,
+                      onTap: () => Navigator.maybePop(context),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  Expanded(
+                    child: AppLogo(
+                      iconSize: 24,
+                      onTap: Navigator.canPop(context)
+                          ? () => Navigator.maybePop(context)
+                          : null,
+                    ),
                   ),
                   if (widget.theme != null)
                     IconButton(
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints:
+                          const BoxConstraints(minWidth: 32, minHeight: 32),
                       tooltip: widget.theme!.isDark(context)
                           ? 'Mudar para Modo Claro'
                           : 'Mudar para Modo Escuro',
@@ -3246,14 +3616,11 @@ class _MainScreenState extends State<MainScreen> {
                 ],
               ),
               const SizedBox(height: 10),
-              // Botão Principal: Nova Cifra com gradiente moderno
-              SizedBox(
-                width: double.infinity,
-                child: BotaoGradiente(
-                  onPressed: _createManualSong,
-                  icon: Icons.add_rounded,
-                  label: 'Nova Cifra',
-                ),
+              // Ação Principal: Nova Cifra
+              BotaoGradiente(
+                onPressed: _createManualSong,
+                icon: Icons.add_rounded,
+                label: 'Nova Cifra',
               ),
             ],
           ),
@@ -4277,12 +4644,15 @@ class _MainScreenState extends State<MainScreen> {
                                         .toggleFavorite(song.id),
                                   ),
                                   PopupMenuButton<String>(
+                                    key: ValueKey('btn_song_menu_${song.id}'),
                                     padding: EdgeInsets.zero,
                                     constraints: const BoxConstraints(
                                         minWidth: 24, minHeight: 28),
                                     icon: const Icon(Icons.more_vert, size: 18),
                                     onSelected: (val) async {
-                                      if (val == 'manage_themes') {
+                                      if (val == 'share_community') {
+                                        _shareToCommunity([song]);
+                                      } else if (val == 'manage_themes') {
                                         _showSongThemesDialog(song);
                                       } else if (val == 'remove_from_theme') {
                                         if (_selectedTheme != null) {
@@ -4332,10 +4702,6 @@ class _MainScreenState extends State<MainScreen> {
                                           try {
                                             await widget.sync.sync();
                                           } catch (_) {}
-                                          if (kIsWeb) {
-                                            reloadWebPage();
-                                            return;
-                                          }
                                           if (mounted) {
                                             ScaffoldMessenger.of(this.context)
                                                 .showSnackBar(
@@ -4362,6 +4728,17 @@ class _MainScreenState extends State<MainScreen> {
                                             ],
                                           ),
                                         ),
+                                      const PopupMenuItem(
+                                        value: 'share_community',
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.share_rounded,
+                                                size: 18, color: AppCores.roxo),
+                                            SizedBox(width: 8),
+                                            Text('Compartilhar com a Comunidade'),
+                                          ],
+                                        ),
+                                      ),
                                       const PopupMenuItem(
                                         value: 'manage_themes',
                                         child: Row(
@@ -4576,7 +4953,15 @@ class _MainScreenState extends State<MainScreen> {
                             constraints: const BoxConstraints(
                                 minWidth: 36, minHeight: 36),
                             onSelected: (val) async {
-                              if (val == 'manage_themes') {
+                              if (val == 'home') {
+                                Navigator.maybePop(context);
+                              } else if (val == 'share_community') {
+                                if (_currentSong != null) {
+                                  await _shareToCommunity([_currentSong!]);
+                                } else {
+                                  await _shareToCommunity();
+                                }
+                              } else if (val == 'manage_themes') {
                                 if (_currentSong != null) {
                                   _showSongThemesDialog(_currentSong!);
                                 }
@@ -4599,6 +4984,41 @@ class _MainScreenState extends State<MainScreen> {
                               }
                             },
                             itemBuilder: (ctx) => [
+                              if (Navigator.canPop(context))
+                                const PopupMenuItem(
+                                  value: 'home',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.home_rounded,
+                                          size: 18, color: AppCores.roxo),
+                                      SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          'Voltar à Página Inicial',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              const PopupMenuItem(
+                                value: 'share_community',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.public_rounded,
+                                        size: 18, color: AppCores.roxo),
+                                    SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        'Compartilhar com a Comunidade',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                               if (_currentSong != null)
                                 const PopupMenuItem(
                                   value: 'manage_themes',

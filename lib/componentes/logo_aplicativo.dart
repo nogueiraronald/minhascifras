@@ -1,22 +1,87 @@
 import 'package:flutter/material.dart';
 
+/// Botão de retorno à Página Inicial com as mesmas dimensões e identidade visual do bloco do AppLogo.
+class BotaoVoltarInicio extends StatelessWidget {
+  const BotaoVoltarInicio({
+    super.key,
+    required this.onTap,
+    this.iconSize = 24,
+    this.tooltip = 'Voltar para a Página Inicial',
+  });
+
+  final VoidCallback onTap;
+  final double iconSize;
+  final String tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final boxSize = iconSize + 10;
+
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: onTap,
+          child: Container(
+            width: boxSize,
+            height: boxSize,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: isDark
+                    ? [
+                        const Color(0xFF4F46E5).withValues(alpha: 0.28),
+                        const Color(0xFF7C3AED).withValues(alpha: 0.22),
+                      ]
+                    : [
+                        const Color(0xFF4F46E5).withValues(alpha: 0.12),
+                        const Color(0xFF7C3AED).withValues(alpha: 0.08),
+                      ],
+              ),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: const Color(0xFF7C3AED)
+                    .withValues(alpha: isDark ? 0.45 : 0.3),
+                width: 1.2,
+              ),
+            ),
+            child: Center(
+              child: Icon(
+                Icons.home_rounded,
+                size: iconSize,
+                color: isDark ? Colors.white : const Color(0xFF4F46E5),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Logo moderno e elegante do aplicativo MinhasCifras.
 class AppLogo extends StatelessWidget {
   const AppLogo({
     super.key,
     this.compact = false,
     this.iconSize = 24,
+    this.onTap,
   });
 
   final bool compact;
   final double iconSize;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return Row(
+    final content = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         // Ícone estilizado com gradiente moderno
@@ -98,6 +163,14 @@ class AppLogo extends StatelessWidget {
           ),
         ],
       ],
+    );
+
+    if (onTap == null) return content;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: onTap,
+      child: content,
     );
   }
 }

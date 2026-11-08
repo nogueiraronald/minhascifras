@@ -6,7 +6,7 @@ import 'dados/repositorio_listas.dart';
 import 'dados/repositorio_musicas.dart';
 import 'dados/controlador_tema.dart';
 import 'dados/repositorio_temas.dart';
-import 'telas/tela_principal.dart';
+import 'telas/tela_inicial.dart';
 import 'servicos/servico_sincronizacao.dart';
 
 class CifrasApp extends StatelessWidget {
@@ -95,7 +95,7 @@ class CifrasApp extends StatelessWidget {
         theme: lightTheme,
         darkTheme: darkTheme,
         themeMode: mode,
-        home: MainScreen(
+        home: TelaInicial(
           repository: repository,
           chords: chords,
           account: account,

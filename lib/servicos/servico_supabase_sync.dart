@@ -104,6 +104,7 @@ class SupabaseSyncService {
         .toList();
 
     final passwordHash = dados['senha_hash'] as String?;
+    final nickname = dados['nickname'] as String?;
 
     return CloudData(
       songs: songsRaw
@@ -123,6 +124,7 @@ class SupabaseSyncService {
       deletedSetlistIds: deletedSetlistIds,
       deletedItemIds: deletedItemIds,
       passwordHash: passwordHash,
+      nickname: nickname,
     );
   }
 
@@ -150,6 +152,75 @@ class SupabaseSyncService {
     }
   }
 
+  /// Verifica se um nickname já está em uso por outra conta/e-mail no Supabase.
+  Future<bool> isNicknameTakenByAnotherUser({
+    required String nickname,
+    required String ownSyncCode,
+    required String ownEmail,
+  }) async {
+    final cleanNick =
+        nickname.trim().replaceFirst(RegExp(r'^@+'), '').toLowerCase();
+    final cleanCode = ownSyncCode.trim().toUpperCase();
+    final cleanEmail = ownEmail.trim().toLowerCase();
+    if (cleanNick.isEmpty) return false;
+
+    final uri = Uri.parse(
+      '${AppConfig.supabaseUrl}/rest/v1/repertorios_sync?select=codigo,dados',
+    );
+
+    try {
+      final response = await _getWithRetry(uri, _readHeaders);
+      if (response.statusCode != 200) return false;
+
+      final rawText = kIsWeb ? response.body : utf8.decode(response.bodyBytes);
+      final list = jsonDecode(rawText) as List;
+
+      for (final item in list) {
+        if (item is! Map<String, dynamic>) continue;
+        final codigo = (item['codigo'] as String? ?? '').trim().toUpperCase();
+        final dados = item['dados'] as Map<String, dynamic>? ?? {};
+
+        if (codigo == 'COMUNIDADE_GLOBAL_V1') {
+          final registry =
+              dados['nicknames_registry'] as Map<String, dynamic>? ?? {};
+          final ownerEmail =
+              (registry[cleanNick] as String? ?? '').trim().toLowerCase();
+          if (ownerEmail.isNotEmpty && ownerEmail != cleanEmail) {
+            return true;
+          }
+          final rawSongs = (dados['community_songs'] as List?) ?? [];
+          for (final s in rawSongs.whereType<Map<String, dynamic>>()) {
+            final sharedNick = (s['sharedByNickname'] as String? ?? '')
+                .trim()
+                .replaceFirst(RegExp(r'^@+'), '')
+                .toLowerCase();
+            final sharedEmail =
+                (s['sharedByEmail'] as String? ?? '').trim().toLowerCase();
+            if (sharedNick == cleanNick &&
+                sharedEmail.isNotEmpty &&
+                sharedEmail != cleanEmail) {
+              return true;
+            }
+          }
+          continue;
+        }
+
+        if (codigo != cleanCode) {
+          final remoteNick = (dados['nickname'] as String? ?? '')
+              .trim()
+              .replaceFirst(RegExp(r'^@+'), '')
+              .toLowerCase();
+          if (remoteNick == cleanNick) {
+            return true;
+          }
+        }
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Grava o repertório completo para o código de sincronização usando Upsert.
   Future<void> writeAll(String syncCode, CloudData data) async {
     final cleanCode = syncCode.trim().toUpperCase();
@@ -170,6 +241,9 @@ class SupabaseSyncService {
       dadosMap['senha_hash'] = data.passwordHash;
     } else {
       dadosMap['senha_hash'] = null;
+    }
+    if (data.nickname != null && data.nickname!.trim().isNotEmpty) {
+      dadosMap['nickname'] = data.nickname!.trim();
     }
 
     final payload = {

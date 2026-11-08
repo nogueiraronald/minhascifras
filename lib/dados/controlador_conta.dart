@@ -17,11 +17,13 @@ class AccountController extends ChangeNotifier {
   final SupabaseSyncService _supabaseSync;
 
   static const String _kUserEmail = 'user_account_email';
+  static const String _kUserNickname = 'user_account_nickname';
   static const String _kSyncCode = 'supabase_sync_code';
   static const String _kSyncPasswordHash = 'supabase_sync_password_hash';
 
   AccountStatus status = AccountStatus.ready;
   String? _userEmail;
+  String? _userNickname;
   String? syncCode;
   String? passwordHash;
   String? pendingSyncCode;
@@ -30,6 +32,13 @@ class AccountController extends ChangeNotifier {
 
   bool get isLoggedIn => _userEmail != null && _userEmail!.trim().isNotEmpty;
   String? get userEmail => _userEmail;
+  String? get userNickname => _userNickname;
+  bool get hasNickname =>
+      _userNickname != null && _userNickname!.trim().isNotEmpty;
+
+  /// Para postar cifras na comunidade, o usuário precisa ter e-mail, senha e nickname cadastrados.
+  bool get canPostToCommunity =>
+      isLoggedIn && isPasswordProtected && hasNickname;
 
   bool get isPasswordProtected =>
       passwordHash != null && passwordHash!.isNotEmpty;
@@ -99,6 +108,7 @@ class AccountController extends ChangeNotifier {
   Future<void> restore() async {
     try {
       _userEmail = _prefs.getString(_kUserEmail);
+      _userNickname = _prefs.getString(_kUserNickname);
       passwordHash = _prefs.getString(_kSyncPasswordHash);
 
       if (_userEmail != null && _userEmail!.trim().isNotEmpty) {
@@ -272,12 +282,38 @@ class AccountController extends ChangeNotifier {
     }
   }
 
+  /// Define ou atualiza o nickname do usuário para compartilhamento na Comunidade
+  Future<void> setNickname(String nickname) async {
+    final clean = nickname.trim().replaceFirst(RegExp(r'^@+'), '');
+    if (clean.isEmpty) {
+      await _prefs.remove(_kUserNickname);
+      _userNickname = null;
+    } else {
+      final email = _userEmail ?? '';
+      final code = syncCode ?? (email.isNotEmpty ? emailToSyncCode(email) : '');
+      final taken = await _supabaseSync.isNicknameTakenByAnotherUser(
+        nickname: clean,
+        ownSyncCode: code,
+        ownEmail: email,
+      );
+      if (taken) {
+        throw FormatException(
+          'O nickname "@$clean" já está em uso por outro e-mail. Por favor, escolha outro nickname.',
+        );
+      }
+      await _prefs.setString(_kUserNickname, clean);
+      _userNickname = clean;
+    }
+    notifyListeners();
+  }
+
   /// Autentica ou vincula com E-mail e Senha no Supabase.
   /// Se o e-mail já existir na nuvem, valida a senha e retorna o total de músicas remotas.
   /// Se for novo, vincula e define a senha.
   Future<int> loginWithEmailAndPassword({
     required String emailInput,
     required String passwordInput,
+    String? nicknameInput,
     Future<void> Function()? onSync,
   }) async {
     final cleanEmail = emailInput.trim().toLowerCase();
@@ -295,6 +331,20 @@ class AccountController extends ChangeNotifier {
       final code = emailToSyncCode(cleanEmail);
       final typedHash = sha256.convert(utf8.encode(cleanPassword)).toString();
 
+      final cleanNick = nicknameInput?.trim().replaceFirst(RegExp(r'^@+'), '');
+      if (cleanNick != null && cleanNick.isNotEmpty) {
+        final taken = await _supabaseSync.isNicknameTakenByAnotherUser(
+          nickname: cleanNick,
+          ownSyncCode: code,
+          ownEmail: cleanEmail,
+        );
+        if (taken) {
+          throw FormatException(
+            'O nickname "@$cleanNick" já está em uso por outro e-mail. Por favor, escolha outro nickname.',
+          );
+        }
+      }
+
       // Consulta se já existe esse repertório na nuvem
       final remote = await _supabaseSync.readAll(code);
 
@@ -309,6 +359,15 @@ class AccountController extends ChangeNotifier {
       await _prefs.setString(_kUserEmail, cleanEmail);
       await _prefs.setString(_kSyncCode, code);
       await _prefs.setString(_kSyncPasswordHash, typedHash);
+
+      if (cleanNick != null && cleanNick.isNotEmpty) {
+        await _prefs.setString(_kUserNickname, cleanNick);
+        _userNickname = cleanNick;
+      } else if (remote.nickname != null && remote.nickname!.trim().isNotEmpty) {
+        final remoteNick = remote.nickname!.trim();
+        await _prefs.setString(_kUserNickname, remoteNick);
+        _userNickname = remoteNick;
+      }
 
       _userEmail = cleanEmail;
       syncCode = code;
@@ -336,10 +395,12 @@ class AccountController extends ChangeNotifier {
   }) async {
     _update(AccountStatus.working);
     await _prefs.remove(_kUserEmail);
+    await _prefs.remove(_kUserNickname);
     await _prefs.remove(_kSyncCode);
     await _prefs.remove(_kSyncPasswordHash);
 
     _userEmail = null;
+    _userNickname = null;
     passwordHash = null;
     pendingSyncCode = null;
     pendingPasswordHash = null;
@@ -359,7 +420,9 @@ class AccountController extends ChangeNotifier {
   /// Desconecta do repertório atual e gera um novo código vazio do zero
   Future<String> resetToNewAccount() async {
     await _prefs.remove(_kUserEmail);
+    await _prefs.remove(_kUserNickname);
     _userEmail = null;
+    _userNickname = null;
     final newCode = _generateCode();
     await _prefs.setString(_kSyncCode, newCode);
     await _prefs.remove(_kSyncPasswordHash);

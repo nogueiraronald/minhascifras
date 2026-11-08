@@ -2,12 +2,9 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:crypto/crypto.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-
-import '../servicos/recarregador_pagina.dart';
 
 import '../dados/controlador_conta.dart';
 import '../dados/repositorio_listas.dart';
@@ -67,6 +64,7 @@ class DesktopLoginDialog extends StatefulWidget {
 class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
+  final _nicknameCtrl = TextEditingController();
   final _codeCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
   final _focusNode = FocusNode();
@@ -85,12 +83,16 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
     if (widget.account.userEmail != null) {
       _emailCtrl.text = widget.account.userEmail!;
     }
+    if (widget.account.userNickname != null) {
+      _nicknameCtrl.text = widget.account.userNickname!;
+    }
   }
 
   @override
   void dispose() {
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
+    _nicknameCtrl.dispose();
     _codeCtrl.dispose();
     _scrollCtrl.dispose();
     _focusNode.dispose();
@@ -101,6 +103,7 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
   Future<void> _loginWithEmail() async {
     final email = _emailCtrl.text.trim();
     final pass = _passwordCtrl.text.trim();
+    final nick = _nicknameCtrl.text.trim();
 
     if (email.isEmpty || !email.contains('@') || !email.contains('.')) {
       setState(() => _error = 'Por favor, digite um endereço de e-mail válido.');
@@ -120,6 +123,7 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
       final remoteSongCount = await widget.account.loginWithEmailAndPassword(
         emailInput: email,
         passwordInput: pass,
+        nicknameInput: nick.isNotEmpty ? nick : null,
         onSync: () async {
           if (widget.sync != null) {
             await widget.sync!.sync();
@@ -142,10 +146,6 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
           duration: const Duration(seconds: 4),
         ),
       );
-
-      if (kIsWeb) {
-        reloadWebPage();
-      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -494,10 +494,6 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
       if (mounted) {
         setState(() => _loading = false);
         Navigator.pop(context);
-        if (kIsWeb) {
-          reloadWebPage();
-          return;
-        }
         messenger.showSnackBar(
           SnackBar(
             content: Text('Você saiu do repertório antigo. Novo repertório limpo criado ($newCode)!'),
@@ -623,6 +619,17 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
+                  if (widget.account.hasNickname)
+                    Text(
+                      '@${widget.account.userNickname}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.grey[400] : Colors.grey[600],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                 ],
               ),
             ),
@@ -843,6 +850,18 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
                     icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 18),
                     onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                   ),
+                  isDense: true,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                onSubmitted: (_) => _loginWithEmail(),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _nicknameCtrl,
+                decoration: InputDecoration(
+                  labelText: 'Seu Nickname (Comunidade)',
+                  hintText: 'ex: ronald_violao',
+                  prefixIcon: const Icon(Icons.person_outline_rounded, size: 18),
                   isDense: true,
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),

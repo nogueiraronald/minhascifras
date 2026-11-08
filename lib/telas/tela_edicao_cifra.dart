@@ -51,6 +51,8 @@ class _SongEditScreenState extends State<SongEditScreen> {
   TextSelection _lastValidSelection = const TextSelection.collapsed(offset: 0);
   late bool _isFavorite;
   late List<String> _tags;
+  String? _imageUrl;
+  String? _imageFileName;
   bool _showChordBar = true;
 
   bool get _isEditing => widget.song != null;
@@ -101,6 +103,7 @@ class _SongEditScreenState extends State<SongEditScreen> {
     _audioFocusNode = FocusNode();
     _isFavorite = widget.song?.isFavorite ?? false;
     _tags = widget.song?.tags.toList() ?? [];
+    _imageUrl = widget.song?.imageUrl;
     _lastValidSelection = TextSelection.collapsed(offset: _content.text.length);
     _content.addListener(_preserveContentSelection);
 
@@ -219,6 +222,51 @@ class _SongEditScreenState extends State<SongEditScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Erro ao escolher arquivo: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _pickSongImageFile() async {
+    try {
+      final res = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['png', 'gif', 'jpg', 'jpeg'],
+        withData: true,
+      );
+      if (res == null || res.files.isEmpty) return;
+
+      final file = res.files.first;
+      Uint8List? bytes = file.bytes;
+      if (bytes == null && file.path != null && !kIsWeb) {
+        bytes = await File(file.path!).readAsBytes();
+      }
+      if (bytes == null) return;
+
+      final ext = (file.extension ?? 'png').toLowerCase();
+      String mime = 'image/png';
+      if (ext == 'gif') {
+        mime = 'image/gif';
+      } else if (ext == 'jpg' || ext == 'jpeg') {
+        mime = 'image/jpeg';
+      }
+      final b64 = base64Encode(bytes);
+      setState(() {
+        _imageUrl = 'data:$mime;base64,$b64';
+        _imageFileName = file.name;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Imagem "${file.name}" carregada para a cifra!'),
+            backgroundColor: const Color(0xFF10B981),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao carregar imagem: $e')),
         );
       }
     }
@@ -446,6 +494,8 @@ class _SongEditScreenState extends State<SongEditScreen> {
     final audio = Song.cleanAudioUrl(_audioUrl.text.trim());
     final hasValidAudio = audio != null && audio.isNotEmpty;
     final durationSeconds = hasValidAudio ? Song.parseDuration(_audioDuration.text) : null;
+    final cleanImg = _imageUrl?.trim();
+    final hasValidImage = cleanImg != null && cleanImg.isNotEmpty;
     final old = widget.song;
     final song = old == null
         ? Song(
@@ -458,6 +508,7 @@ class _SongEditScreenState extends State<SongEditScreen> {
             tags: _tags,
             audioUrl: hasValidAudio ? audio : null,
             audioDurationSeconds: durationSeconds,
+            imageUrl: hasValidImage ? cleanImg : null,
           )
         : old.copyWith(
             title: title,
@@ -468,6 +519,7 @@ class _SongEditScreenState extends State<SongEditScreen> {
             tags: _tags,
             audioUrl: hasValidAudio ? audio : null,
             audioDurationSeconds: durationSeconds,
+            imageUrl: hasValidImage ? cleanImg : null,
           );
 
     await widget.repository.save(song);
@@ -856,7 +908,13 @@ class _SongEditScreenState extends State<SongEditScreen> {
                   children: [
                     Expanded(
                       flex: 4,
-                      child: _buildThemesSection(inputFill, isDark),
+                      child: Column(
+                        children: [
+                          _buildThemesSection(inputFill, isDark),
+                          const SizedBox(height: 10),
+                          _buildImageSection(inputFill, isDark),
+                        ],
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -869,6 +927,8 @@ class _SongEditScreenState extends State<SongEditScreen> {
               return Column(
                 children: [
                   _buildThemesSection(inputFill, isDark),
+                  const SizedBox(height: 10),
+                  _buildImageSection(inputFill, isDark),
                   const SizedBox(height: 10),
                   _buildAudioSection(inputFill, isDark),
                 ],
@@ -2033,6 +2093,158 @@ class _SongEditScreenState extends State<SongEditScreen> {
                 }).toList(),
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildImagePreviewThumb(String imageUrl) {
+    Widget fallback() {
+      return Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          gradient: AppCores.gradienteLogo,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Icon(Icons.music_note_rounded, color: Colors.white, size: 20),
+      );
+    }
+
+    if (imageUrl.startsWith('data:image')) {
+      try {
+        final commaIdx = imageUrl.indexOf(',');
+        final b64 = commaIdx >= 0 ? imageUrl.substring(commaIdx + 1) : imageUrl;
+        final bytes = base64Decode(b64);
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.memory(
+            bytes,
+            width: 40,
+            height: 40,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => fallback(),
+          ),
+        );
+      } catch (_) {
+        return fallback();
+      }
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Image.network(
+        imageUrl,
+        width: 40,
+        height: 40,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => fallback(),
+      ),
+    );
+  }
+
+  Widget _buildImageSection(Color inputFill, bool isDark) {
+    final hasImage = _imageUrl != null && _imageUrl!.trim().isNotEmpty;
+
+    return Container(
+      key: const ValueKey('edit_song_image_section'),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: inputFill,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: hasImage
+              ? AppCores.roxo.withValues(alpha: 0.45)
+              : Colors.grey.withValues(alpha: isDark ? 0.25 : 0.15),
+        ),
+      ),
+      child: Row(
+        children: [
+          if (hasImage)
+            _buildImagePreviewThumb(_imageUrl!.trim())
+          else
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: AppCores.roxo.withValues(alpha: isDark ? 0.2 : 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.image_outlined,
+                color: AppCores.roxo,
+                size: 20,
+              ),
+            ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Imagem da Cifra (Comunidade)',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  hasImage
+                      ? (_imageFileName ?? 'Imagem anexada para exibição na comunidade')
+                      : 'Opcional: envie PNG, GIF ou JPG para exibir na comunidade',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    color: hasImage
+                        ? Colors.green
+                        : (isDark ? Colors.grey[400] : Colors.grey[600]),
+                    fontWeight: hasImage ? FontWeight.w600 : FontWeight.normal,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 6),
+          if (hasImage)
+            IconButton(
+              key: const ValueKey('btn_remove_song_image'),
+              tooltip: 'Remover imagem',
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              icon: const Icon(
+                Icons.delete_outline_rounded,
+                size: 18,
+                color: Colors.redAccent,
+              ),
+              onPressed: () {
+                setState(() {
+                  _imageUrl = null;
+                  _imageFileName = null;
+                });
+              },
+            ),
+          OutlinedButton.icon(
+            key: const ValueKey('btn_upload_song_image'),
+            onPressed: _pickSongImageFile,
+            icon: const Icon(Icons.upload_file_rounded, size: 15),
+            label: Text(
+              hasImage ? 'Trocar' : 'Enviar Imagem',
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+            ),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppCores.roxo,
+              side: BorderSide(color: AppCores.roxo.withValues(alpha: 0.4)),
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+              visualDensity: VisualDensity.compact,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
         ],
       ),
     );
