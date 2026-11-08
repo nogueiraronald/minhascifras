@@ -7,7 +7,7 @@ echo "=========================================="
 
 echo ""
 echo "🌐 [1/5] Compilando Web PWA (release)..."
-flutter build web --release --base-href "/minhascifras-web/"
+flutter build web --release --base-href "/minhascifras-web/" --no-tree-shake-icons
 
 echo ""
 echo "🧹 [2/5] Limpando arquivos residuais e conflitantes..."
@@ -93,7 +93,7 @@ with open('build/web/flutter_bootstrap.js', 'r') as f:
     code = f.read()
 
 # Desativa o worker concorrente legado do Flutter e direciona CanvasKit para pasta local
-code = re.sub(r'serviceWorkerSettings\s*:\s*\{', 'serviceWorkerSettings: null, config: {canvasKitBaseUrl: \"canvaskit/\"}, _old: {', code)
+code = re.sub(r'serviceWorkerSettings\s*:\s*\{', 'serviceWorkerSettings: null, config: {canvasKitBaseUrl: \"canvaskit/\", useLocalCanvasKit: true, fontFallbackBaseUrl: \"assets/fonts/\"}, _old: {', code)
 code = re.sub(r'\"serviceWorkerVersion\"\s*:', '\"_disabled_sw\":', code)
 
 # Resiliência WebAssembly para Safari iOS: fallback se compileStreaming falhar

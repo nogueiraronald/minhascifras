@@ -35,6 +35,7 @@ class CifrasApp extends StatelessWidget {
       colorSchemeSeed: const Color(0xFF7C3AED),
       brightness: Brightness.light,
       useMaterial3: true,
+      fontFamily: 'Roboto',
       scaffoldBackgroundColor: const Color(0xFFF8FAFC),
       appBarTheme: const AppBarTheme(
         elevation: 0,
@@ -62,6 +63,7 @@ class CifrasApp extends StatelessWidget {
       colorSchemeSeed: const Color(0xFFA78BFA),
       brightness: Brightness.dark,
       useMaterial3: true,
+      fontFamily: 'Roboto',
       scaffoldBackgroundColor: const Color(0xFF0F172A),
       cardColor: const Color(0xFF1E293B),
       appBarTheme: const AppBarTheme(
