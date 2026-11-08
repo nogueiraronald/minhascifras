@@ -74,7 +74,7 @@ class ThemeRepository extends ChangeNotifier {
 
     List<String> list;
     if (raw == null) {
-      list = List.from(defaultThemes);
+      list = [];
       await prefs.setString(_key, jsonEncode(list));
     } else {
       list = (jsonDecode(raw) as List)
@@ -172,14 +172,9 @@ class ThemeRepository extends ChangeNotifier {
     }
   }
 
-  /// Reseta todos os temas para os temas padrão do sistema, limpando temas personalizados do usuário anterior.
+  /// Reseta todos os temas para zero (usuário novo ou deslogado inicia com 0 temas).
   Future<void> resetToDefault() async {
-    _deletedThemes.clear();
-    _themes
-      ..clear()
-      ..addAll(defaultThemes)
-      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-    await _persist();
+    await clearAll();
   }
 
   /// Limpa e define a lista de temas do usuário autenticado.

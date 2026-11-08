@@ -11,8 +11,12 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  test('ThemeRepository initializes with defaults and allows CRUD', () async {
+  test('ThemeRepository initializes with 0 themes for new user and allows CRUD', () async {
     final repo = await ThemeRepository.open();
+    expect(repo.themes.isEmpty, isTrue);
+
+    await repo.addTheme('Adoração');
+    await repo.addTheme('Baião');
     expect(repo.themes.contains('Adoração'), isTrue);
     expect(repo.themes.contains('Baião'), isTrue);
 

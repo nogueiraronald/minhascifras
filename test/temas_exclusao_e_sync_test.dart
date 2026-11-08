@@ -11,10 +11,17 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
+  test('ThemeRepository open inicia com 0 temas para novo usuário', () async {
+    final themeRepo = await ThemeRepository.open();
+    expect(themeRepo.themes.isEmpty, isTrue);
+    expect(themeRepo.themes.length, 0);
+  });
+
   test('ThemeRepository removeTheme remove o tema permanentemente e não o ressuscita ao reabrir', () async {
     final songRepo = await SongRepository.open();
     final themeRepo = await ThemeRepository.open();
 
+    await themeRepo.addTheme('Baião');
     expect(themeRepo.themes.contains('Baião'), isTrue);
 
     // Remove o tema 'Baião'
@@ -66,6 +73,7 @@ void main() {
     final songRepo = await SongRepository.open();
     final themeRepo = await ThemeRepository.open();
 
+    await themeRepo.addTheme('Amor de Deus');
     final song = Song(
       id: 's1',
       title: 'Canção de Amor',

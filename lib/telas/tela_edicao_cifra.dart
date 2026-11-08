@@ -2008,7 +2008,7 @@ class _SongEditScreenState extends State<SongEditScreen> {
   }
 
   Widget _buildThemesSection(Color inputFill, bool isDark) {
-    final availableThemes = widget.musicThemes?.themes ?? ThemeRepository.defaultThemes;
+    final availableThemes = widget.musicThemes?.themes ?? const <String>[];
 
     return Container(
       width: double.infinity,
