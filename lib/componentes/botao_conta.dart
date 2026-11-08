@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../dados/controlador_conta.dart';
 import '../dados/repositorio_listas.dart';
 import '../dados/repositorio_musicas.dart';
+import '../dados/repositorio_temas.dart';
 import '../servicos/servico_sincronizacao.dart';
 import 'dialogo_login_desktop.dart';
 
@@ -13,6 +14,7 @@ class AccountButton extends StatelessWidget {
     required this.account,
     this.songs,
     this.setlists,
+    this.musicThemes,
     this.sync,
     this.compact = false,
   });
@@ -20,6 +22,7 @@ class AccountButton extends StatelessWidget {
   final AccountController account;
   final SongRepository? songs;
   final SetlistRepository? setlists;
+  final ThemeRepository? musicThemes;
   final SyncService? sync;
   final bool compact;
 
@@ -29,6 +32,7 @@ class AccountButton extends StatelessWidget {
       account,
       songs: songs,
       setlists: setlists,
+      musicThemes: musicThemes,
       sync: sync,
     );
   }

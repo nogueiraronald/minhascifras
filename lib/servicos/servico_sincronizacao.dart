@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../dados/controlador_conta.dart';
 import '../dados/repositorio_listas.dart';
 import '../dados/repositorio_musicas.dart';
+import '../dados/repositorio_temas.dart';
 import '../modelos/lista_repertorio.dart';
 import '../modelos/item_lista_repertorio.dart';
 import '../modelos/musica.dart';
@@ -15,15 +16,24 @@ import 'servico_supabase_sync.dart';
 /// Reconcilia músicas por (Título + Artista) e Setlists por Nome.
 /// Vence a versão com updatedAt mais recente ou mescla sem gerar duplicatas.
 class SyncService extends ChangeNotifier {
-  SyncService(this._songs, this._setlists, this._account, {SupabaseSyncService? supabaseSync})
-      : _supabaseSync = supabaseSync ?? SupabaseSyncService() {
+  SyncService(
+    this._songs,
+    this._setlists,
+    this._account, {
+    ThemeRepository? musicThemes,
+    SupabaseSyncService? supabaseSync,
+  })  : _musicThemes = musicThemes,
+        _supabaseSync = supabaseSync ?? SupabaseSyncService() {
     _songs.onLocalChange = _schedule;
+    _setlists.onLocalChange = _schedule;
+    _musicThemes?.onLocalChange = _schedule;
     _account.addListener(_onAccount);
   }
 
   final SongRepository _songs;
   final SetlistRepository _setlists;
   final AccountController _account;
+  final ThemeRepository? _musicThemes;
   final SupabaseSyncService _supabaseSync;
 
   Timer? _debounce;
@@ -154,6 +164,9 @@ class SyncService extends ChangeNotifier {
     if (setlistPull.isNotEmpty || itemPull.isNotEmpty) {
       await _setlists.upsertAll(setlists: setlistPull, items: itemPull);
     }
+    if (remote.themes.isNotEmpty && _musicThemes != null) {
+      await _musicThemes.setThemes(remote.themes);
+    }
 
     final allDeletedSongIds = {
       ...remote.deletedSongIds,
@@ -196,6 +209,7 @@ class SyncService extends ChangeNotifier {
           songs: _songs.songs,
           setlists: _setlists.setlists,
           items: _setlists.items,
+          themes: _musicThemes?.themes ?? const [],
           deletedSongIds: allDeletedSongIds,
           deletedSongKeys: allDeletedSongKeys,
           deletedSetlistIds: allDeletedSetlistIds,

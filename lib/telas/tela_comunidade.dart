@@ -16,6 +16,7 @@ import '../dados/controlador_conta.dart';
 import '../dados/controlador_tema.dart';
 import '../dados/repositorio_listas.dart';
 import '../dados/repositorio_musicas.dart';
+import '../dados/repositorio_temas.dart';
 import '../modelos/lista_repertorio.dart';
 import '../modelos/musica.dart';
 import '../modelos/musica_comunidade.dart';
@@ -38,6 +39,7 @@ class TelaComunidade extends StatefulWidget {
     required this.sync,
     required this.setlists,
     this.theme,
+    this.musicThemes,
     this.communityService,
   });
 
@@ -47,6 +49,7 @@ class TelaComunidade extends StatefulWidget {
   final SyncService sync;
   final SetlistRepository setlists;
   final ThemeController? theme;
+  final ThemeRepository? musicThemes;
   final CommunityService? communityService;
 
   /// Fluxo unificado para compartilhar uma ou mais músicas na Comunidade
@@ -1980,6 +1983,7 @@ class _TelaComunidadeState extends State<TelaComunidade> {
                 account: widget.account,
                 songs: widget.repository,
                 setlists: widget.setlists,
+                musicThemes: widget.musicThemes,
                 sync: widget.sync,
                 compact: isMobile,
               ),

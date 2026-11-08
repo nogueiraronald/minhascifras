@@ -9,6 +9,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../dados/controlador_conta.dart';
 import '../dados/repositorio_listas.dart';
 import '../dados/repositorio_musicas.dart';
+import '../dados/repositorio_temas.dart';
 import '../servicos/servico_pdf_recuperacao.dart';
 import '../servicos/servico_sincronizacao.dart';
 import 'dialogo_desbloqueio_conta.dart';
@@ -26,6 +27,7 @@ class DesktopLoginDialog extends StatefulWidget {
     required this.account,
     this.songs,
     this.setlists,
+    this.musicThemes,
     this.sync,
     this.initialShowEmailLogin = true,
   });
@@ -33,6 +35,7 @@ class DesktopLoginDialog extends StatefulWidget {
   final AccountController account;
   final SongRepository? songs;
   final SetlistRepository? setlists;
+  final ThemeRepository? musicThemes;
   final SyncService? sync;
   final bool initialShowEmailLogin;
 
@@ -41,6 +44,7 @@ class DesktopLoginDialog extends StatefulWidget {
     AccountController account, {
     SongRepository? songs,
     SetlistRepository? setlists,
+    ThemeRepository? musicThemes,
     SyncService? sync,
     bool initialShowEmailLogin = true,
   }) {
@@ -51,6 +55,7 @@ class DesktopLoginDialog extends StatefulWidget {
         account: account,
         songs: songs,
         setlists: setlists,
+        musicThemes: musicThemes,
         sync: sync,
         initialShowEmailLogin: initialShowEmailLogin,
       ),
@@ -120,6 +125,15 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
     });
 
     try {
+      final currentEmail = widget.account.userEmail;
+      final isDifferentUser = currentEmail == null ||
+          currentEmail.toLowerCase() != email.toLowerCase();
+      if (isDifferentUser) {
+        await widget.songs?.clearAll();
+        await widget.setlists?.clearAll();
+        await widget.musicThemes?.resetToDefault();
+      }
+
       final remoteSongCount = await widget.account.loginWithEmailAndPassword(
         emailInput: email,
         passwordInput: pass,
@@ -216,6 +230,13 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
         }
         verifiedPasswordHash = typedHash;
         setState(() => _loading = true);
+      }
+
+      final currentCode = widget.account.syncCode;
+      if (currentCode != null && currentCode.toUpperCase() != code.toUpperCase()) {
+        await widget.songs?.clearAll();
+        await widget.setlists?.clearAll();
+        await widget.musicThemes?.resetToDefault();
       }
 
       await widget.account.connectToSyncCode(code, passwordHash: verifiedPasswordHash);
@@ -388,6 +409,7 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
           'A proteção por senha está ativa para este repertório. Você pode alterar a senha atual ou removê-la.',
           style: TextStyle(fontSize: 13, height: 1.3),
         ),
+        actionsOverflowDirection: VerticalDirection.down,
         actions: [
           TextButton(
             onPressed: () async {
@@ -426,7 +448,12 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
           children: [
             Icon(Icons.logout_rounded, color: Colors.redAccent, size: 22),
             SizedBox(width: 8),
-            Text('Sair deste Repertório?', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+            Expanded(
+              child: Text(
+                'Sair deste Repertório?',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+              ),
+            ),
           ],
         ),
         content: Column(
@@ -466,6 +493,7 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
             ),
           ],
         ),
+        actionsOverflowDirection: VerticalDirection.down,
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -489,6 +517,7 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
     try {
       await widget.songs?.clearAll();
       await widget.setlists?.clearAll();
+      await widget.musicThemes?.resetToDefault();
       final newCode = await widget.account.resetToNewAccount();
 
       if (mounted) {

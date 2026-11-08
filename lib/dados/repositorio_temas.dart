@@ -14,6 +14,9 @@ class ThemeRepository extends ChangeNotifier {
   final SharedPreferences _prefs;
   final List<String> _themes;
 
+  /// Chamado após alterações do usuário (não pela sincronização).
+  VoidCallback? onLocalChange;
+
   static const List<String> defaultThemes = [
     'Aclamação',
     'Adoração',
@@ -117,8 +120,33 @@ class ThemeRepository extends ChangeNotifier {
     }
   }
 
-  Future<void> _persist() async {
+  /// Reseta todos os temas para os temas padrão do sistema, limpando temas personalizados do usuário anterior.
+  Future<void> resetToDefault() async {
+    _themes
+      ..clear()
+      ..addAll(defaultThemes)
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    await _persist();
+  }
+
+  /// Limpa e define a lista de temas do usuário autenticado.
+  Future<void> setThemes(List<String> newThemes) async {
+    final set = <String>{
+      ...defaultThemes,
+      ...newThemes.map((t) => t.trim()).where((t) => t.isNotEmpty),
+    };
+    _themes
+      ..clear()
+      ..addAll(set)
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    await _persist(fromSync: true);
+  }
+
+  Future<void> _persist({bool fromSync = false}) async {
     await _prefs.setString(_key, jsonEncode(_themes));
     notifyListeners();
+    if (!fromSync) {
+      onLocalChange?.call();
+    }
   }
 }

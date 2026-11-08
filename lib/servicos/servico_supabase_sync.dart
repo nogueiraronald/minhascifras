@@ -90,6 +90,7 @@ class SupabaseSyncService {
     final songsRaw = (dados['songs'] as List?) ?? [];
     final setlistsRaw = (dados['setlists'] as List?) ?? [];
     final itemsRaw = (dados['items'] as List?) ?? [];
+    final themesRaw = (dados['themes'] as List?) ?? [];
     final deletedSongIds = ((dados['deletedSongIds'] as List?) ?? [])
         .map((e) => e.toString())
         .toList();
@@ -118,6 +119,10 @@ class SupabaseSyncService {
       items: itemsRaw
           .whereType<Map<String, dynamic>>()
           .map((j) => SetlistItem.fromJson(j))
+          .toList(),
+      themes: themesRaw
+          .map((e) => e.toString().trim())
+          .where((t) => t.isNotEmpty)
           .toList(),
       deletedSongIds: deletedSongIds,
       deletedSongKeys: deletedSongKeys,
@@ -232,6 +237,7 @@ class SupabaseSyncService {
       'songs': data.songs.map((s) => s.toJson()).toList(),
       'setlists': data.setlists.map((s) => s.toJson()).toList(),
       'items': data.items.map((i) => i.toJson()).toList(),
+      if (data.themes.isNotEmpty) 'themes': data.themes,
       'deletedSongIds': data.deletedSongIds,
       'deletedSongKeys': data.deletedSongKeys,
       'deletedSetlistIds': data.deletedSetlistIds,

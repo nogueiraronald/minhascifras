@@ -8,6 +8,8 @@ import 'package:cifras_app/componentes/dialogo_login_desktop.dart';
 import 'package:cifras_app/dados/controlador_conta.dart';
 import 'package:cifras_app/dados/repositorio_listas.dart';
 import 'package:cifras_app/dados/repositorio_musicas.dart';
+import 'package:cifras_app/dados/repositorio_temas.dart';
+import 'package:cifras_app/modelos/lista_repertorio.dart';
 import 'package:cifras_app/modelos/musica.dart';
 import 'package:cifras_app/servicos/dados_nuvem.dart';
 import 'package:cifras_app/servicos/servico_supabase_sync.dart';
@@ -203,6 +205,52 @@ void main() {
       expect(find.text('Backup Conectado e Ativo'), findsOneWidget);
       expect(find.text('Sincronizar Agora'), findsOneWidget);
       expect(find.text('Sair desta conta / Desconectar aparelho'), findsOneWidget);
+    });
+
+    testWidgets('ao deslogar completamente, limpa temas personalizados e listas do usuário', (tester) async {
+      tester.view.physicalSize = const Size(500, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      SharedPreferences.setMockInitialValues({
+        'user_account_email': 'usuario@musicas.com',
+      });
+      final loggedAccount = await AccountController.open();
+      final themeRepo = await ThemeRepository.open();
+
+      // Adiciona lista e tema customizado
+      await setlistRepo.saveSetlist(Setlist(id: 'set-test-1', name: 'Lista Especial'));
+      await themeRepo.addTheme('Tema Exclusivo do Usuário');
+      expect(setlistRepo.setlists, isNotEmpty);
+      expect(themeRepo.themes, contains('Tema Exclusivo do Usuário'));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DesktopLoginDialog(
+              account: loggedAccount,
+              songs: songRepo,
+              setlists: setlistRepo,
+              musicThemes: themeRepo,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Toca em sair da conta
+      await tester.tap(find.text('Sair desta conta / Desconectar aparelho'));
+      await tester.pumpAndSettle();
+
+      // Confirma no diálogo de confirmação
+      expect(find.text('Sim, Sair e Limpar'), findsOneWidget);
+      await tester.tap(find.text('Sim, Sair e Limpar'));
+      await tester.pumpAndSettle();
+
+      // Verifica se as listas e os temas customizados foram limpos
+      expect(setlistRepo.setlists, isEmpty);
+      expect(themeRepo.themes.contains('Tema Exclusivo do Usuário'), isFalse);
+      expect(loggedAccount.isLoggedIn, isFalse);
     });
   });
 }

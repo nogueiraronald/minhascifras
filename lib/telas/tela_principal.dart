@@ -1156,6 +1156,7 @@ class _MainScreenState extends State<MainScreen> {
           sync: widget.sync,
           setlists: widget.setlists,
           theme: widget.theme,
+          musicThemes: widget.musicThemes,
           communityService: widget.communityService,
         ),
       ),
@@ -3679,6 +3680,7 @@ class _MainScreenState extends State<MainScreen> {
                     account: widget.account,
                     songs: widget.repository,
                     setlists: widget.setlists,
+                    musicThemes: widget.musicThemes,
                     sync: widget.sync,
                     compact: true,
                   ),
@@ -4310,6 +4312,7 @@ class _MainScreenState extends State<MainScreen> {
                                   widget.account,
                                   songs: widget.repository,
                                   setlists: widget.setlists,
+                                  musicThemes: widget.musicThemes,
                                   sync: widget.sync,
                                 );
                               },
@@ -5116,6 +5119,7 @@ class _MainScreenState extends State<MainScreen> {
                                   widget.account,
                                   songs: widget.repository,
                                   setlists: widget.setlists,
+                                  musicThemes: widget.musicThemes,
                                   sync: widget.sync,
                                 );
                               }
