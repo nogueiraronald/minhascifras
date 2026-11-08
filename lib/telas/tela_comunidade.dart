@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -351,14 +350,11 @@ class TelaComunidade extends StatefulWidget {
       for (final id in initialSelectedSongIds)
         if (userSongs.any((s) => s.id == id && findShared(s) == null)) id,
     };
-    final imageUrlCtrl = TextEditingController();
     String filter = '';
     bool publishing = false;
     String? removingSongId;
     bool modifiedCommunity = false;
     String? dialogError;
-    String? pickedImageDataUri;
-    String? pickedImageName;
 
     return showDialog<List<CommunitySong>>(
       context: context,
@@ -497,7 +493,7 @@ class TelaComunidade extends StatefulWidget {
                     ),
 
                     ConstrainedBox(
-                      constraints: const BoxConstraints(maxHeight: 220),
+                      constraints: const BoxConstraints(maxHeight: 330),
                       child: Container(
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(12),
@@ -525,96 +521,197 @@ class TelaComunidade extends StatefulWidget {
                                   if (alreadyShared) {
                                     final isRemoving = removingSongId == s.id;
                                     final impCount = sharedEntry.importCount;
-                                    return ListTile(
-                                      dense: true,
-                                      visualDensity: VisualDensity.compact,
-                                      leading: const Icon(
-                                        Icons.cloud_done_rounded,
-                                        color: Colors.green,
-                                        size: 20,
-                                      ),
-                                      title: Text(
-                                        s.title,
-                                        style: TextStyle(
-                                          fontSize: 13.5,
-                                          fontWeight: FontWeight.w600,
-                                          color: isDark
-                                              ? Colors.white70
-                                              : Colors.black54,
+                                    return Container(
+                                      margin: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 4),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 10, vertical: 8),
+                                      decoration: BoxDecoration(
+                                        color: isDark
+                                            ? const Color(0xFF1E293B)
+                                                .withValues(alpha: 0.6)
+                                            : Colors.grey.shade50,
+                                        borderRadius:
+                                            BorderRadius.circular(10),
+                                        border: Border.all(
+                                          color: Colors.green
+                                              .withValues(alpha: 0.28),
+                                          width: 1,
                                         ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
                                       ),
-                                      subtitle: Text(
-                                        'Já compartilhada na comunidade • ${impCount == 1 ? "1 import" : "$impCount imports"}',
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.green,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      trailing: TextButton.icon(
-                                        key: ValueKey(
-                                            'btn_dialog_unshare_${s.id}'),
-                                        style: TextButton.styleFrom(
-                                          visualDensity: VisualDensity.compact,
-                                          foregroundColor: Colors.redAccent,
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 8, vertical: 4),
-                                        ),
-                                        onPressed: isRemoving || publishing
-                                            ? null
-                                            : () async {
-                                                setModalState(() {
-                                                  removingSongId = s.id;
-                                                  dialogError = null;
-                                                });
-                                                try {
-                                                  final updated = await service
-                                                      .unpublishSong(
-                                                    target: sharedEntry,
-                                                    userEmail: userEmail,
-                                                  );
-                                                  if (!ctx.mounted) return;
-                                                  setModalState(() {
-                                                    currentCommunity = updated;
-                                                    removingSongId = null;
-                                                    modifiedCommunity = true;
-                                                  });
-                                                  if (context.mounted) {
-                                                    ScaffoldMessenger.of(
-                                                            context)
-                                                        .showSnackBar(
-                                                      SnackBar(
-                                                        content: Text(
-                                                          '"${s.title}" removida do compartilhamento na comunidade.',
-                                                        ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              const Icon(
+                                                Icons.cloud_done_rounded,
+                                                color: Colors.green,
+                                                size: 16,
+                                              ),
+                                              const SizedBox(width: 6),
+                                              Expanded(
+                                                child: Text(
+                                                  s.title,
+                                                  style: TextStyle(
+                                                    fontSize: 13.5,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: isDark
+                                                        ? Colors.white
+                                                        : const Color(
+                                                            0xFF1E293B),
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              // Badge de Imports destacado e totalmente legível
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 2.5),
+                                                decoration: BoxDecoration(
+                                                  color: AppCores.roxo.withValues(
+                                                      alpha: isDark
+                                                          ? 0.25
+                                                          : 0.12),
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
+                                                  border: Border.all(
+                                                    color: AppCores.roxo
+                                                        .withValues(alpha: 0.4),
+                                                    width: 1,
+                                                  ),
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    const Icon(
+                                                      Icons.download_rounded,
+                                                      size: 11.5,
+                                                      color: AppCores.roxo,
+                                                    ),
+                                                    const SizedBox(width: 3),
+                                                    Text(
+                                                      '$impCount import(s)',
+                                                      style: const TextStyle(
+                                                        fontSize: 11,
+                                                        fontWeight:
+                                                            FontWeight.w800,
+                                                        color: AppCores.roxo,
                                                       ),
-                                                    );
-                                                  }
-                                                } catch (e) {
-                                                  if (ctx.mounted) {
-                                                    setModalState(() {
-                                                      removingSongId = null;
-                                                      dialogError = e
-                                                          .toString()
-                                                          .replaceFirst(
-                                                              RegExp(
-                                                                  r'^(Exception|FormatException):\s*'),
-                                                              '');
-                                                    });
-                                                  }
-                                                }
-                                              },
-                                        icon: const Icon(
-                                            Icons.delete_outline_rounded,
-                                            size: 16),
-                                        label: Text(
-                                          isRemoving ? '...' : 'Remover',
-                                          style: const TextStyle(fontSize: 11.5),
-                                        ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 5),
+                                          Row(
+                                            children: [
+                                              const Expanded(
+                                                child: Text(
+                                                  'Já compartilhada na comunidade',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: Colors.green,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 6),
+                                              TextButton.icon(
+                                                key: ValueKey(
+                                                    'btn_dialog_unshare_${s.id}'),
+                                                style: TextButton.styleFrom(
+                                                  visualDensity:
+                                                      VisualDensity.compact,
+                                                  foregroundColor:
+                                                      Colors.redAccent,
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                          horizontal: 6,
+                                                          vertical: 2),
+                                                  minimumSize: Size.zero,
+                                                  tapTargetSize:
+                                                      MaterialTapTargetSize
+                                                          .shrinkWrap,
+                                                ),
+                                                onPressed: isRemoving ||
+                                                        publishing
+                                                    ? null
+                                                    : () async {
+                                                        setModalState(() {
+                                                          removingSongId = s.id;
+                                                          dialogError = null;
+                                                        });
+                                                        try {
+                                                          final updated =
+                                                              await service
+                                                                  .unpublishSong(
+                                                            target: sharedEntry,
+                                                            userEmail: userEmail,
+                                                          );
+                                                          if (!ctx.mounted) {
+                                                            return;
+                                                          }
+                                                          setModalState(() {
+                                                            currentCommunity =
+                                                                updated;
+                                                            removingSongId = null;
+                                                            modifiedCommunity =
+                                                                true;
+                                                          });
+                                                          if (context.mounted) {
+                                                            ScaffoldMessenger.of(
+                                                                    context)
+                                                                .showSnackBar(
+                                                              SnackBar(
+                                                                content: Text(
+                                                                  '"${s.title}" removida do compartilhamento na comunidade.',
+                                                                ),
+                                                              ),
+                                                            );
+                                                          }
+                                                        } catch (e) {
+                                                          if (ctx.mounted) {
+                                                            setModalState(() {
+                                                              removingSongId =
+                                                                  null;
+                                                              dialogError = e
+                                                                  .toString()
+                                                                  .replaceFirst(
+                                                                    RegExp(
+                                                                        r'^(Exception|FormatException):\s*'),
+                                                                    '',
+                                                                  );
+                                                            });
+                                                          }
+                                                        }
+                                                      },
+                                                icon: const Icon(
+                                                    Icons.delete_outline_rounded,
+                                                    size: 15),
+                                                label: Text(
+                                                  isRemoving
+                                                      ? '...'
+                                                      : 'Remover',
+                                                  style: const TextStyle(
+                                                      fontSize: 11),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
                                       ),
                                     );
                                   }
@@ -656,67 +753,6 @@ class TelaComunidade extends StatefulWidget {
                       ),
                     ),
 
-                    const SizedBox(height: 12),
-
-                    // Imagem opcional da música
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            key: const ValueKey('community_share_image_url'),
-                            controller: imageUrlCtrl,
-                            decoration: InputDecoration(
-                              labelText: 'Imagem da música (URL opcional)',
-                              hintText: 'https://exemplo.com/capa.jpg',
-                              prefixIcon:
-                                  const Icon(Icons.image_outlined, size: 18),
-                              isDense: true,
-                              border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10)),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 11),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10)),
-                          ),
-                          onPressed: () async {
-                            try {
-                              final res = await FilePicker.platform.pickFiles(
-                                type: FileType.image,
-                                withData: true,
-                              );
-                              if (res != null &&
-                                  res.files.isNotEmpty &&
-                                  res.files.first.bytes != null) {
-                                final file = res.files.first;
-                                final ext =
-                                    (file.extension ?? 'png').toLowerCase();
-                                final mime =
-                                    ext == 'jpg' || ext == 'jpeg'
-                                        ? 'image/jpeg'
-                                        : 'image/png';
-                                final b64 = base64Encode(file.bytes!);
-                                setModalState(() {
-                                  pickedImageDataUri = 'data:$mime;base64,$b64';
-                                  pickedImageName = file.name;
-                                });
-                              }
-                            } catch (_) {}
-                          },
-                          icon: const Icon(Icons.upload_file_rounded, size: 17),
-                          label: Text(
-                            pickedImageName != null ? 'Foto OK' : 'Arquivo',
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        ),
-                      ],
-                    ),
-
                     if (dialogError != null) ...[
                       const SizedBox(height: 8),
                       Text(
@@ -754,15 +790,11 @@ class TelaComunidade extends StatefulWidget {
                                         .where(
                                             (s) => selectedIds.contains(s.id))
                                         .toList();
-                                    final img = pickedImageDataUri ??
-                                        (imageUrlCtrl.text.trim().isNotEmpty
-                                            ? imageUrlCtrl.text.trim()
-                                            : null);
                                     final updated = await service.publishSongs(
                                       songs: chosenSongs,
                                       nickname: account.userNickname ?? '',
                                       email: account.userEmail ?? '',
-                                      imageUrl: img,
+                                      imageUrl: null,
                                     );
                                     if (!ctx.mounted) return;
                                     Navigator.pop(ctx, updated);
