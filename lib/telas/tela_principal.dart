@@ -1142,11 +1142,11 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
-  void _abrirComunidadeDireto() {
-    if (Navigator.of(context).canPop()) {
-      Navigator.of(context).popUntil((route) => route.isFirst);
+  Future<void> _abrirComunidadeDireto() async {
+    if (Scaffold.maybeOf(context)?.isDrawerOpen == true) {
+      Navigator.of(context).pop();
     }
-    Navigator.push<void>(
+    await Navigator.push<void>(
       context,
       MaterialPageRoute(
         builder: (_) => TelaComunidade(
@@ -1160,6 +1160,11 @@ class _MainScreenState extends State<MainScreen> {
         ),
       ),
     );
+    if (mounted) {
+      _ensureFirstSongSelected();
+      _loadMySharedSongs();
+      setState(() {});
+    }
   }
 
   Future<void> _createManualSong() async {
@@ -1907,6 +1912,21 @@ class _MainScreenState extends State<MainScreen> {
       }
     }
 
+    // Se nenhuma música estiver selecionada, mas existirem músicas no repertório, seleciona a primeira automaticamente
+    if (_currentSong == null) {
+      final available = _getVisibleSongs();
+      if (available.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _currentSong == null) {
+            final fresh = _getVisibleSongs();
+            if (fresh.isNotEmpty) {
+              _selectSong(fresh.first);
+            }
+          }
+        });
+      }
+    }
+
     if (_currentSong == null) {
       return Center(
         child: Padding(
@@ -1922,14 +1942,37 @@ class _MainScreenState extends State<MainScreen> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Toque em "Nova Cifra" para criar, importar por link ou enviar arquivos.',
+                'Toque em "Nova Cifra" ou explore a Comunidade para enriquecer seu repertório.',
+                textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey),
               ),
               const SizedBox(height: 20),
-              FilledButton.icon(
-                onPressed: _createManualSong,
-                icon: const Icon(Icons.add),
-                label: const Text('Nova Cifra'),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 12,
+                runSpacing: 10,
+                children: [
+                  FilledButton.icon(
+                    onPressed: _createManualSong,
+                    icon: const Icon(Icons.add),
+                    label: const Text('Nova Cifra'),
+                  ),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: AppCores.roxo, width: 1.2),
+                    ),
+                    onPressed: _abrirComunidadeDireto,
+                    icon: const Icon(Icons.public_rounded,
+                        color: AppCores.roxo, size: 18),
+                    label: const Text(
+                      'Comunidade',
+                      style: TextStyle(
+                        color: AppCores.roxo,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

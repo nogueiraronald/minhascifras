@@ -672,6 +672,58 @@ void main() {
         expect(find.text('Comunidade'), findsOneWidget);
       },
     );
+
+    testWidgets(
+      'Importar cifra da Comunidade cria lista "Importadas da Comunidade", adiciona tag e seleciona no leitor',
+      (tester) async {
+        final mockSong = CommunitySong(
+          id: 'comm-song-999',
+          song: Song(
+            id: 'orig-999',
+            title: 'Canção Celeste',
+            artist: 'Coral Anjos',
+            content: 'C  G\nGlória a Deus',
+          ),
+          sharedByNickname: 'cantor',
+          sharedByEmail: 'cantor@cifras.com',
+          sharedAt: DateTime(2026, 11, 8),
+        );
+        final community = _FakeCommunityService(initial: [mockSong]);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: TelaComunidade(
+              repository: repo,
+              chords: chords,
+              account: account,
+              sync: sync,
+              setlists: setlists,
+              communityService: community,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Clica no botão Importar da música
+        final importBtn = find.text('Importar').first;
+        await tester.tap(importBtn);
+        await tester.pumpAndSettle();
+
+        // Verifica que a música foi importada com a tag 'Comunidade'
+        final importedSong = repo.songs.firstWhere((s) => s.title == 'Canção Celeste');
+        expect(importedSong.tags, contains('Comunidade'));
+
+        // Verifica que a lista 'Importadas da Comunidade' foi criada e contém a música
+        final commList = setlists.setlists.firstWhere(
+          (l) => l.name.toLowerCase() == 'importadas da comunidade',
+        );
+        final items = setlists.itemsFor(commList.id);
+        expect(items.any((it) => it.songId == importedSong.id), isTrue);
+
+        // Verifica o SnackBar com a opção 'Ver Cifra'
+        expect(find.text('Ver Cifra'), findsOneWidget);
+      },
+    );
   });
 }
 

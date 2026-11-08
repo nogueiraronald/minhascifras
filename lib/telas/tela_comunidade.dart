@@ -16,11 +16,13 @@ import '../dados/controlador_conta.dart';
 import '../dados/controlador_tema.dart';
 import '../dados/repositorio_listas.dart';
 import '../dados/repositorio_musicas.dart';
+import '../modelos/lista_repertorio.dart';
 import '../modelos/musica.dart';
 import '../modelos/musica_comunidade.dart';
 import '../servicos/servico_comunidade.dart';
 import '../servicos/servico_sincronizacao.dart';
 import '../servicos/transpositor_acordes.dart';
+import 'package:uuid/uuid.dart';
 
 /// Tela da Comunidade:
 /// - Carrossel em destaque com as últimas cifras compartilhadas (ícone da música,
@@ -895,7 +897,7 @@ class _TelaComunidadeState extends State<TelaComunidade> {
 
   void _voltarParaInicio() {
     if (Navigator.of(context).canPop()) {
-      Navigator.of(context).popUntil((route) => route.isFirst);
+      Navigator.of(context).pop();
     }
   }
 
@@ -1021,10 +1023,34 @@ class _TelaComunidadeState extends State<TelaComunidade> {
   }
 
   Future<void> _importSong(CommunitySong item) async {
-    await _service.importSongToUserList(
+    final imported = await _service.importSongToUserList(
       communitySong: item,
       repository: widget.repository,
     );
+
+    // 1. Cria ou adiciona automaticamente à lista 'Importadas da Comunidade' na aba Listas
+    try {
+      final allLists = widget.setlists.setlists;
+      var targetList = allLists
+          .where((l) =>
+              l.name.trim().toLowerCase() == 'importadas da comunidade' ||
+              l.name.trim().toLowerCase() == 'comunidade')
+          .firstOrNull;
+      if (targetList == null) {
+        targetList = Setlist(
+          id: const Uuid().v4(),
+          name: 'Importadas da Comunidade',
+        );
+        await widget.setlists.saveSetlist(targetList);
+      }
+      await widget.setlists.addSongs(targetList.id, [imported.id]);
+    } catch (_) {}
+
+    // 2. Dispara a sincronização imediata em nuvem
+    try {
+      widget.sync.sync();
+    } catch (_) {}
+
     try {
       final refreshed = await _service.fetchCommunitySongs();
       if (mounted) {
@@ -1042,6 +1068,13 @@ class _TelaComunidadeState extends State<TelaComunidade> {
           '"${item.song.title}" importada para Minhas Cifras com sucesso!',
         ),
         backgroundColor: Colors.green[800],
+        action: SnackBarAction(
+          label: 'Ver Cifra',
+          textColor: Colors.white,
+          onPressed: () {
+            _openOnlineSongReader(item);
+          },
+        ),
       ),
     );
   }

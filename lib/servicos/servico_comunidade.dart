@@ -288,6 +288,10 @@ class CommunityService {
     required SongRepository repository,
   }) async {
     final source = communitySong.song;
+    final tags = List<String>.from(source.tags);
+    if (!tags.any((t) => t.trim().toLowerCase() == 'comunidade')) {
+      tags.add('Comunidade');
+    }
     final imported = Song(
       id: _uuid.v4(),
       title: source.title,
@@ -295,7 +299,7 @@ class CommunityService {
       content: source.content,
       originalKey: source.originalKey,
       isFavorite: false,
-      tags: List<String>.from(source.tags),
+      tags: tags,
       audioUrl: source.audioUrl,
       audioDurationSeconds: source.audioDurationSeconds,
       imageUrl: communitySong.imageUrl ?? source.imageUrl,
