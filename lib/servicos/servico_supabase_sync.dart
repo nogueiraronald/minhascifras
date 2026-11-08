@@ -103,6 +103,10 @@ class SupabaseSyncService {
     final deletedItemIds = ((dados['deletedItemIds'] as List?) ?? [])
         .map((e) => e.toString())
         .toList();
+    final deletedThemes = ((dados['deletedThemes'] as List?) ?? [])
+        .map((e) => e.toString().trim().toLowerCase())
+        .where((e) => e.isNotEmpty)
+        .toList();
 
     final passwordHash = dados['senha_hash'] as String?;
     final nickname = dados['nickname'] as String?;
@@ -128,6 +132,7 @@ class SupabaseSyncService {
       deletedSongKeys: deletedSongKeys,
       deletedSetlistIds: deletedSetlistIds,
       deletedItemIds: deletedItemIds,
+      deletedThemes: deletedThemes,
       passwordHash: passwordHash,
       nickname: nickname,
     );
@@ -237,7 +242,8 @@ class SupabaseSyncService {
       'songs': data.songs.map((s) => s.toJson()).toList(),
       'setlists': data.setlists.map((s) => s.toJson()).toList(),
       'items': data.items.map((i) => i.toJson()).toList(),
-      if (data.themes.isNotEmpty) 'themes': data.themes,
+      'themes': data.themes,
+      if (data.deletedThemes.isNotEmpty) 'deletedThemes': data.deletedThemes,
       'deletedSongIds': data.deletedSongIds,
       'deletedSongKeys': data.deletedSongKeys,
       'deletedSetlistIds': data.deletedSetlistIds,

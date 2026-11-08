@@ -172,8 +172,46 @@ class SyncService extends ChangeNotifier {
     if (setlistPull.isNotEmpty || itemPull.isNotEmpty) {
       await _setlists.upsertAll(setlists: setlistPull, items: itemPull);
     }
-    if (remote.themes.isNotEmpty && _musicThemes != null) {
-      await _musicThemes.setThemes(remote.themes);
+
+    var themePush = false;
+    final allDeletedThemes = <String>{};
+    if (_musicThemes != null) {
+      allDeletedThemes.addAll(remote.deletedThemes);
+      allDeletedThemes.addAll(_musicThemes.deletedThemes);
+
+      // Aplica exclusões remotas aos temas locais
+      for (final del in remote.deletedThemes) {
+        final dLower = del.trim().toLowerCase();
+        if (_musicThemes.themes.any((t) => t.toLowerCase() == dLower)) {
+          await _musicThemes.removeThemeFromSync(del);
+        }
+      }
+
+      // Adiciona novos temas da nuvem que NÃO foram excluídos pelo usuário
+      for (final rTheme in remote.themes) {
+        final rLower = rTheme.trim().toLowerCase();
+        if (!allDeletedThemes.contains(rLower) &&
+            !_musicThemes.themes.any((t) => t.toLowerCase() == rLower)) {
+          await _musicThemes.addThemeFromSync(rTheme);
+        }
+      }
+
+      // Se um tema local foi adicionado pelo usuário após ter sido excluído na nuvem,
+      // ele é retirado de allDeletedThemes
+      for (final t in _musicThemes.themes) {
+        allDeletedThemes.remove(t.toLowerCase().trim());
+      }
+
+      // Verifica se a lista de temas locais ou exclusões difere da nuvem
+      final localThemeSet =
+          _musicThemes.themes.map((t) => t.toLowerCase()).toSet();
+      final remoteThemeSet =
+          remote.themes.map((t) => t.toLowerCase()).toSet();
+      if (localThemeSet.length != remoteThemeSet.length ||
+          !localThemeSet.containsAll(remoteThemeSet) ||
+          allDeletedThemes.length != remote.deletedThemes.length) {
+        themePush = true;
+      }
     }
 
     final activeLocalKeys = _songs.songs
@@ -217,7 +255,7 @@ class SyncService extends ChangeNotifier {
         remote.nickname!.isNotEmpty) {
       await _account.setNickname(remote.nickname!);
     }
-    if (songPush || setlistPush || itemPush || isFirstUpload || passwordChanged || nicknameChanged || deletionsRevoked) {
+    if (songPush || setlistPush || itemPush || themePush || isFirstUpload || passwordChanged || nicknameChanged || deletionsRevoked) {
       await _supabaseSync.writeAll(
         code,
         CloudData(
@@ -229,6 +267,7 @@ class SyncService extends ChangeNotifier {
           deletedSongKeys: allDeletedSongKeys,
           deletedSetlistIds: allDeletedSetlistIds,
           deletedItemIds: allDeletedItemIds,
+          deletedThemes: allDeletedThemes.toList(),
           passwordHash: _account.passwordHash,
           nickname: _account.userNickname ?? remote.nickname,
         ),
