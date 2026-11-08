@@ -105,6 +105,7 @@ class _MainScreenState extends State<MainScreen> {
   List<CommunitySong> _mySharedSongs = [];
   bool _isLoadingSharedSongs = false;
   bool _isSharedSectionExpanded = true;
+  final ScrollController _mySharedScrollCtrl = ScrollController();
 
   // Seleção e visualização da cifra
   Song? _currentSong;
@@ -224,6 +225,7 @@ class _MainScreenState extends State<MainScreen> {
     _setlistSearchController.dispose();
     _setlistSearchFocusNode.dispose();
     _setlistsListController.dispose();
+    _mySharedScrollCtrl.dispose();
     _scrollTimer?.cancel();
     _bubbleTimer?.cancel();
     _sidebarSongListController.dispose();
@@ -1040,14 +1042,21 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   // --- Ações de Criação, Comunidade e Setlists ---
-  Future<void> _loadMySharedSongs() async {
+  Future<void> _loadMySharedSongs({bool force = false}) async {
     final email = widget.account.email?.trim().toLowerCase() ?? '';
     if (email.isEmpty) {
-      if (mounted) setState(() => _mySharedSongs = []);
+      if (mounted) {
+        setState(() {
+          _mySharedSongs = [];
+          _isLoadingSharedSongs = false;
+        });
+      }
       return;
     }
-    if (_isLoadingSharedSongs) return;
-    _isLoadingSharedSongs = true;
+    if (_isLoadingSharedSongs && !force) return;
+    if (mounted) {
+      setState(() => _isLoadingSharedSongs = true);
+    }
     try {
       final all = await _communityService.fetchCommunitySongs();
       if (mounted) {
@@ -1061,7 +1070,7 @@ class _MainScreenState extends State<MainScreen> {
       // Ignora erro de rede temporário
     } finally {
       if (mounted) {
-        _isLoadingSharedSongs = false;
+        setState(() => _isLoadingSharedSongs = false);
       }
     }
   }
@@ -1179,12 +1188,22 @@ class _MainScreenState extends State<MainScreen> {
 
     if (confirm == true) {
       try {
-        setState(() => _isLoadingSharedSongs = true);
+        setState(() {
+          _isLoadingSharedSongs = true;
+          _mySharedSongs = [];
+        });
         await _communityService.unpublishAllSongsByUser(userEmail: email);
-        await _loadMySharedSongs();
+        await _loadMySharedSongs(force: true);
         if (mounted) {
+          setState(() {
+            _isLoadingSharedSongs = false;
+            _mySharedSongs = [];
+          });
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
+              duration: const Duration(seconds: 4),
+              behavior: SnackBarBehavior.floating,
               content: Text(
                 'Todas as $total cifra(s) foram removidas da Comunidade com sucesso.',
               ),
@@ -1195,12 +1214,19 @@ class _MainScreenState extends State<MainScreen> {
       } catch (e) {
         if (mounted) {
           setState(() => _isLoadingSharedSongs = false);
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
+              duration: const Duration(seconds: 4),
+              behavior: SnackBarBehavior.floating,
               content: Text('Erro ao remover da comunidade: $e'),
               backgroundColor: Colors.redAccent,
             ),
           );
+        }
+      } finally {
+        if (mounted) {
+          setState(() => _isLoadingSharedSongs = false);
         }
       }
     }
@@ -2912,8 +2938,10 @@ class _MainScreenState extends State<MainScreen> {
                   maxHeight: MediaQuery.sizeOf(context).height * 0.44,
                 ),
                 child: Scrollbar(
+                  controller: _mySharedScrollCtrl,
                   thumbVisibility: true,
                   child: ListView.separated(
+                    controller: _mySharedScrollCtrl,
                     shrinkWrap: true,
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
