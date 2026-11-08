@@ -842,18 +842,33 @@ class TelaComunidade extends StatefulWidget {
   State<TelaComunidade> createState() => _TelaComunidadeState();
 }
 
+/// Modelo de agrupamento de músicas da comunidade por Artista
+class CommunityArtistGroup {
+  CommunityArtistGroup({
+    required this.artistName,
+    required this.songs,
+  });
+
+  final String artistName;
+  final List<CommunitySong> songs;
+}
+
 class _TelaComunidadeState extends State<TelaComunidade> {
   late final CommunityService _service =
       widget.communityService ?? CommunityService();
 
   final TextEditingController _searchCtrl = TextEditingController();
   final PageController _carouselCtrl = PageController();
+  final ScrollController _mainScrollCtrl = ScrollController();
 
   List<CommunitySong> _communitySongs = [];
   bool _loading = true;
   String? _error;
   String _searchQuery = '';
   int _carouselIndex = 0;
+  int _currentPage = 1;
+  bool _showSuggestions = false;
+  static const int _artistsPerPage = 5;
 
   @override
   void initState() {
@@ -862,6 +877,8 @@ class _TelaComunidadeState extends State<TelaComunidade> {
       if (mounted) {
         setState(() {
           _searchQuery = _searchCtrl.text.trim().toLowerCase();
+          _showSuggestions = _searchQuery.isNotEmpty;
+          _currentPage = 1;
         });
       }
     });
@@ -872,7 +889,105 @@ class _TelaComunidadeState extends State<TelaComunidade> {
   void dispose() {
     _searchCtrl.dispose();
     _carouselCtrl.dispose();
+    _mainScrollCtrl.dispose();
     super.dispose();
+  }
+
+  void _voltarParaInicio() {
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    }
+  }
+
+  void _selectSearchSuggestion(String term) {
+    setState(() {
+      _searchCtrl.text = term;
+      _searchQuery = term.trim().toLowerCase();
+      _showSuggestions = false;
+      _currentPage = 1;
+    });
+    FocusScope.of(context).unfocus();
+  }
+
+  List<String> _getMatchingArtists(String query) {
+    if (query.isEmpty) return const [];
+    final matching = <String>{};
+    for (final item in _communitySongs) {
+      final art = item.song.artist.trim();
+      if (art.isNotEmpty && art.toLowerCase().contains(query)) {
+        matching.add(art);
+        if (matching.length >= 4) break;
+      }
+    }
+    final list = matching.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return list;
+  }
+
+  List<CommunitySong> _getMatchingSongs(String query) {
+    if (query.isEmpty) return const [];
+    final matching = <CommunitySong>[];
+    for (final item in _communitySongs) {
+      if (item.song.title.toLowerCase().contains(query)) {
+        if (!matching.any((s) =>
+            s.song.title.toLowerCase() == item.song.title.toLowerCase())) {
+          matching.add(item);
+          if (matching.length >= 4) break;
+        }
+      }
+    }
+    matching.sort((a, b) =>
+        a.song.title.toLowerCase().compareTo(b.song.title.toLowerCase()));
+    return matching;
+  }
+
+  List<CommunityArtistGroup> _buildArtistGroups(
+    List<CommunitySong> songs,
+    String query,
+  ) {
+    final filtered = songs.where((item) {
+      if (query.isEmpty) return true;
+      return item.song.title.toLowerCase().contains(query) ||
+          item.song.artist.toLowerCase().contains(query) ||
+          item.sharedByNickname.toLowerCase().contains(query);
+    }).toList();
+
+    final map = <String, List<CommunitySong>>{};
+    for (final item in filtered) {
+      final rawArtist = item.song.artist.trim();
+      final artist = rawArtist.isEmpty ? 'Artista Desconhecido' : rawArtist;
+      map.putIfAbsent(artist, () => []).add(item);
+    }
+
+    final sortedArtists = map.keys.toList()
+      ..sort((a, b) {
+        if (a == 'Artista Desconhecido') return 1;
+        if (b == 'Artista Desconhecido') return -1;
+        return a.toLowerCase().compareTo(b.toLowerCase());
+      });
+
+    final groups = <CommunityArtistGroup>[];
+    for (final artist in sortedArtists) {
+      final artistSongs = map[artist]!;
+      artistSongs.sort((a, b) =>
+          a.song.title.toLowerCase().compareTo(b.song.title.toLowerCase()));
+      groups.add(CommunityArtistGroup(artistName: artist, songs: artistSongs));
+    }
+
+    return groups;
+  }
+
+  void _changePage(int newPage) {
+    setState(() {
+      _currentPage = newPage;
+    });
+    if (_mainScrollCtrl.hasClients) {
+      _mainScrollCtrl.animateTo(
+        0,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+      );
+    }
   }
 
   Future<void> _loadOnlineCommunitySongs() async {
@@ -1509,18 +1624,277 @@ class _TelaComunidadeState extends State<TelaComunidade> {
     );
   }
 
+  Widget _buildSuggestionsBox(
+    bool isDark,
+    bool isMobile,
+    List<String> artists,
+    List<CommunitySong> songs,
+  ) {
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: AppCores.roxo.withValues(alpha: isDark ? 0.4 : 0.25),
+          width: 1.1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppCores.roxo.withValues(alpha: isDark ? 0.2 : 0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 10, 8, 6),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.auto_awesome_rounded,
+                  size: 15,
+                  color: AppCores.roxo,
+                ),
+                const SizedBox(width: 6),
+                const Expanded(
+                  child: Text(
+                    'Sugestões de busca:',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppCores.roxo,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 24, minHeight: 24),
+                  tooltip: 'Fechar sugestões',
+                  icon: const Icon(Icons.close_rounded, size: 16),
+                  onPressed: () => setState(() => _showSuggestions = false),
+                ),
+              ],
+            ),
+          ),
+          Divider(
+            height: 1,
+            color: isDark ? Colors.white12 : Colors.black12,
+          ),
+          if (artists.isNotEmpty) ...[
+            for (final art in artists)
+              InkWell(
+                key: ValueKey('suggestion_artist_$art'),
+                onTap: () => _selectSearchSuggestion(art),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppCores.roxo.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.mic_rounded,
+                                size: 12, color: AppCores.roxo),
+                            SizedBox(width: 4),
+                            Text(
+                              'Artista',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.bold,
+                                color: AppCores.roxo,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          art,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const Icon(Icons.north_west_rounded,
+                          size: 14, color: Colors.grey),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+          if (songs.isNotEmpty) ...[
+            for (final song in songs)
+              InkWell(
+                key: ValueKey('suggestion_song_${song.id}'),
+                onTap: () => _selectSearchSuggestion(song.song.title),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.music_note_rounded,
+                                size: 12, color: Colors.blue),
+                            SizedBox(width: 4),
+                            Text(
+                              'Música',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blue,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          song.song.artist.isNotEmpty
+                              ? '${song.song.title} (${song.song.artist})'
+                              : song.song.title,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const Icon(Icons.north_west_rounded,
+                          size: 14, color: Colors.grey),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaginationBar(
+    bool isDark,
+    bool isMobile,
+    int currentPage,
+    int totalPages,
+    int totalGroups,
+    int totalSongs,
+  ) {
+    if (totalGroups == 0) return const SizedBox.shrink();
+
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 14 : 24,
+        vertical: 8,
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Flexible(
+            child: Text(
+              totalPages > 1
+                  ? 'Pág. $currentPage/$totalPages • $totalGroups artista(s) • $totalSongs cifra(s)'
+                  : '$totalGroups artista(s) • $totalSongs cifra(s)',
+              style: TextStyle(
+                fontSize: isMobile ? 11.5 : 12.5,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.grey[400] : Colors.grey[700],
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (totalPages > 1)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  key: const ValueKey('btn_community_prev_page'),
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Página anterior',
+                  icon: const Icon(Icons.chevron_left_rounded),
+                  onPressed: currentPage > 1
+                      ? () => _changePage(currentPage - 1)
+                      : null,
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    gradient: AppCores.gradienteBotao,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '$currentPage / $totalPages',
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  key: const ValueKey('btn_community_next_page'),
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Próxima página',
+                  icon: const Icon(Icons.chevron_right_rounded),
+                  onPressed: currentPage < totalPages
+                      ? () => _changePage(currentPage + 1)
+                      : null,
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final width = MediaQuery.sizeOf(context).width;
     final isMobile = width < 720;
 
-    final filtered = _communitySongs.where((item) {
-      if (_searchQuery.isEmpty) return true;
-      return item.song.title.toLowerCase().contains(_searchQuery) ||
-          item.song.artist.toLowerCase().contains(_searchQuery) ||
-          item.sharedByNickname.toLowerCase().contains(_searchQuery);
-    }).toList();
+    final groups = _buildArtistGroups(_communitySongs, _searchQuery);
+    final totalSongs = groups.fold<int>(0, (prev, g) => prev + g.songs.length);
+    final totalGroups = groups.length;
+    final totalPages = (totalGroups / _artistsPerPage).ceil().clamp(1, 9999);
+    final safePage = _currentPage.clamp(1, totalPages);
+    final pagedGroups = groups
+        .skip((safePage - 1) * _artistsPerPage)
+        .take(_artistsPerPage)
+        .toList();
+
+    final visibleCommunitySongs = groups.expand((g) => g.songs).toList();
+    final matchingArtists = _getMatchingArtists(_searchQuery);
+    final matchingSongs = _getMatchingSongs(_searchQuery);
 
     return ListenableBuilder(
       listenable: Listenable.merge([widget.account, widget.repository]),
@@ -1535,7 +1909,7 @@ class _TelaComunidadeState extends State<TelaComunidade> {
                 if (Navigator.canPop(context)) ...[
                   BotaoVoltarInicio(
                     iconSize: 24,
-                    onTap: () => Navigator.maybePop(context),
+                    onTap: _voltarParaInicio,
                   ),
                   const SizedBox(width: 10),
                 ],
@@ -1544,7 +1918,7 @@ class _TelaComunidadeState extends State<TelaComunidade> {
                     compact: false,
                     iconSize: 24,
                     onTap: Navigator.canPop(context)
-                        ? () => Navigator.maybePop(context)
+                        ? _voltarParaInicio
                         : null,
                   ),
                 ),
@@ -1716,6 +2090,7 @@ class _TelaComunidadeState extends State<TelaComunidade> {
                                   ),
                                 )
                               : CustomScrollView(
+                                  controller: _mainScrollCtrl,
                                   slivers: [
                                     SliverToBoxAdapter(
                                       child: Padding(
@@ -1731,155 +2106,460 @@ class _TelaComunidadeState extends State<TelaComunidade> {
                                           isMobile ? 14 : 24,
                                           14,
                                           isMobile ? 14 : 24,
-                                          8,
+                                          6,
                                         ),
-                                        child: TextField(
-                                          controller: _searchCtrl,
-                                          decoration: InputDecoration(
-                                            hintText:
-                                                'Pesquisar na comunidade por música, artista ou @usuário...',
-                                            prefixIcon: const Icon(
-                                                Icons.search_rounded,
-                                                size: 18),
-                                            suffixIcon:
-                                                _searchQuery.isNotEmpty
-                                                    ? IconButton(
-                                                        icon: const Icon(
-                                                            Icons.clear_rounded,
-                                                            size: 18),
-                                                        onPressed: () =>
-                                                            _searchCtrl.clear(),
-                                                      )
-                                                    : null,
-                                            isDense: true,
-                                            contentPadding:
-                                                const EdgeInsets.symmetric(
-                                                    horizontal: 14,
-                                                    vertical: 11),
-                                            border: OutlineInputBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(12),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            TextField(
+                                              controller: _searchCtrl,
+                                              decoration: InputDecoration(
+                                                hintText:
+                                                    'Pesquisar na comunidade por música, artista ou @usuário...',
+                                                prefixIcon: const Icon(
+                                                    Icons.search_rounded,
+                                                    size: 18),
+                                                suffixIcon:
+                                                    _searchQuery.isNotEmpty
+                                                        ? IconButton(
+                                                            icon: const Icon(
+                                                                Icons
+                                                                    .clear_rounded,
+                                                                size: 18),
+                                                            onPressed: () {
+                                                              _searchCtrl.clear();
+                                                              setState(() {
+                                                                _searchQuery = '';
+                                                                _showSuggestions = false;
+                                                                _currentPage = 1;
+                                                              });
+                                                            },
+                                                          )
+                                                        : null,
+                                                isDense: true,
+                                                contentPadding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 14,
+                                                        vertical: 11),
+                                                border: OutlineInputBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                          12),
+                                                ),
+                                              ),
+                                            ),
+                                            if (_showSuggestions &&
+                                                _searchQuery.isNotEmpty &&
+                                                (matchingArtists.isNotEmpty ||
+                                                    matchingSongs.isNotEmpty))
+                                              _buildSuggestionsBox(
+                                                isDark,
+                                                isMobile,
+                                                matchingArtists,
+                                                matchingSongs,
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    SliverToBoxAdapter(
+                                      child: _buildPaginationBar(
+                                        isDark,
+                                        isMobile,
+                                        safePage,
+                                        totalPages,
+                                        totalGroups,
+                                        totalSongs,
+                                      ),
+                                    ),
+                                    if (groups.isEmpty)
+                                      SliverToBoxAdapter(
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(32),
+                                          child: Center(
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(
+                                                  Icons.search_off_rounded,
+                                                  size: 44,
+                                                  color: Colors.grey,
+                                                ),
+                                                const SizedBox(height: 10),
+                                                Text(
+                                                  'Nenhuma cifra encontrada para "$_searchQuery"',
+                                                  textAlign: TextAlign.center,
+                                                  style: const TextStyle(
+                                                    fontSize: 14.5,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 12),
+                                                OutlinedButton.icon(
+                                                  onPressed: () {
+                                                    _searchCtrl.clear();
+                                                    setState(() {
+                                                      _searchQuery = '';
+                                                      _showSuggestions = false;
+                                                      _currentPage = 1;
+                                                    });
+                                                  },
+                                                  icon: const Icon(
+                                                      Icons.clear_rounded,
+                                                      size: 16),
+                                                  label: const Text(
+                                                      'Limpar busca'),
+                                                ),
+                                              ],
                                             ),
                                           ),
                                         ),
-                                      ),
-                                    ),
-                                    SliverPadding(
-                                      padding: EdgeInsets.symmetric(
-                                        horizontal: isMobile ? 14 : 24,
-                                        vertical: 8,
-                                      ),
-                                      sliver: SliverList.separated(
-                                        itemCount: filtered.length,
-                                        separatorBuilder: (_, __) =>
-                                            const SizedBox(height: 8),
-                                        itemBuilder: (context, index) {
-                                          final item = filtered[index];
-                                          final alreadyImported =
-                                              _isAlreadyInUserList(item.song);
-                                          final isMine =
-                                              _isSharedByCurrentUser(item);
+                                      )
+                                    else
+                                      SliverPadding(
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: isMobile ? 14 : 24,
+                                          vertical: 8,
+                                        ),
+                                        sliver: SliverList.separated(
+                                          itemCount: pagedGroups.length,
+                                          separatorBuilder: (_, __) =>
+                                              const SizedBox(height: 14),
+                                          itemBuilder: (context, groupIndex) {
+                                            final group =
+                                                pagedGroups[groupIndex];
 
-                                          return Container(
-                                            decoration: BoxDecoration(
-                                              color: isDark
-                                                  ? const Color(0xFF1E293B)
-                                                  : Colors.white,
-                                              borderRadius:
-                                                  BorderRadius.circular(14),
-                                              border: Border.all(
+                                            return Container(
+                                              decoration: BoxDecoration(
                                                 color: isDark
-                                                    ? Colors.white10
-                                                    : Colors.black12,
-                                              ),
-                                            ),
-                                            child: ListTile(
-                                              contentPadding:
-                                                  const EdgeInsets.symmetric(
-                                                      horizontal: 12,
-                                                      vertical: 4),
-                                              leading: _buildSongArtwork(
-                                                item,
-                                                size: 46,
-                                                borderRadius: 12,
-                                              ),
-                                              title: Text(
-                                                item.song.title,
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.w700,
-                                                  fontSize: 14,
-                                                ),
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                              subtitle: Text(
-                                                '${item.song.artist.isNotEmpty ? "${item.song.artist} • " : ""}Por @${item.sharedByNickname} em ${item.formattedDate}${item.importCount > 0 ? " • ${item.importCount} import(s)" : ""}',
-                                                style: TextStyle(
-                                                  fontSize: 12,
+                                                    ? const Color(0xFF1E293B)
+                                                    : Colors.white,
+                                                borderRadius:
+                                                    BorderRadius.circular(16),
+                                                border: Border.all(
                                                   color: isDark
-                                                      ? Colors.grey[400]
-                                                      : Colors.grey[600],
+                                                      ? Colors.white10
+                                                      : Colors.black12,
                                                 ),
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                              trailing: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  IconButton(
-                                                    tooltip:
-                                                        'Visualizar cifra',
-                                                    visualDensity:
-                                                        VisualDensity.compact,
-                                                    icon: const Icon(
-                                                      Icons.visibility_outlined,
-                                                      color: AppCores.roxo,
-                                                    ),
-                                                    onPressed: () =>
-                                                        _openOnlineSongReader(
-                                                            item, filtered),
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: Colors.black
+                                                        .withValues(
+                                                            alpha: isDark
+                                                                ? 0.2
+                                                                : 0.04),
+                                                    blurRadius: 8,
+                                                    offset:
+                                                        const Offset(0, 2),
                                                   ),
-                                                  if (!alreadyImported)
-                                                    IconButton(
-                                                      tooltip:
-                                                          'Importar para Minhas Cifras',
-                                                      visualDensity:
-                                                          VisualDensity.compact,
-                                                      icon: const Icon(
-                                                        Icons
-                                                            .download_for_offline_rounded,
-                                                        color: AppCores.roxo,
-                                                      ),
-                                                      onPressed: () =>
-                                                          _importSong(item),
-                                                    ),
-                                                  if (isMine)
-                                                    IconButton(
-                                                      key: ValueKey(
-                                                          'btn_list_unshare_${item.id}'),
-                                                      tooltip:
-                                                          'Remover do compartilhamento',
-                                                      visualDensity:
-                                                          VisualDensity.compact,
-                                                      icon: const Icon(
-                                                        Icons
-                                                            .delete_outline_rounded,
-                                                        color: Colors.redAccent,
-                                                      ),
-                                                      onPressed: () =>
-                                                          _unpublishCommunitySong(
-                                                              item),
-                                                    ),
                                                 ],
                                               ),
-                                              onTap: () =>
-                                                  _openOnlineSongReader(
-                                                      item, filtered),
-                                            ),
-                                          );
-                                        },
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.stretch,
+                                                children: [
+                                                  // Cabeçalho do Artista com Avatar e Contagem de Cifras
+                                                  Container(
+                                                    padding:
+                                                        const EdgeInsets
+                                                            .symmetric(
+                                                      horizontal: 14,
+                                                      vertical: 10,
+                                                    ),
+                                                    decoration: BoxDecoration(
+                                                      color: AppCores.roxo
+                                                          .withValues(
+                                                              alpha: isDark
+                                                                  ? 0.16
+                                                                  : 0.07),
+                                                      borderRadius:
+                                                          const BorderRadius
+                                                              .vertical(
+                                                        top: Radius.circular(
+                                                            16),
+                                                      ),
+                                                      border: Border(
+                                                        bottom: BorderSide(
+                                                          color: AppCores.roxo
+                                                              .withValues(
+                                                            alpha: isDark
+                                                                ? 0.25
+                                                                : 0.15,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    child: Row(
+                                                      children: [
+                                                        Container(
+                                                          width: 30,
+                                                          height: 30,
+                                                          decoration:
+                                                              const BoxDecoration(
+                                                            gradient: AppCores
+                                                                .gradienteLogo,
+                                                            shape: BoxShape
+                                                                .circle,
+                                                          ),
+                                                          child: const Center(
+                                                            child: Icon(
+                                                              Icons
+                                                                  .mic_rounded,
+                                                              color:
+                                                                  Colors.white,
+                                                              size: 16,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        const SizedBox(
+                                                            width: 10),
+                                                        Expanded(
+                                                          child: Text(
+                                                            group.artistName,
+                                                            style: TextStyle(
+                                                              fontSize: isMobile
+                                                                  ? 14
+                                                                  : 15.5,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w800,
+                                                              color: isDark
+                                                                  ? Colors
+                                                                      .white
+                                                                  : const Color(
+                                                                      0xFF1E293B),
+                                                            ),
+                                                            maxLines: 1,
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
+                                                          ),
+                                                        ),
+                                                        Container(
+                                                          padding:
+                                                              const EdgeInsets
+                                                                  .symmetric(
+                                                            horizontal: 8,
+                                                            vertical: 3.5,
+                                                          ),
+                                                          decoration:
+                                                              BoxDecoration(
+                                                            color: AppCores
+                                                                .roxo
+                                                                .withValues(
+                                                                    alpha:
+                                                                        0.15),
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        12),
+                                                            border: Border.all(
+                                                              color: AppCores
+                                                                  .roxo
+                                                                  .withValues(
+                                                                alpha: 0.35,
+                                                              ),
+                                                              width: 1,
+                                                            ),
+                                                          ),
+                                                          child: Text(
+                                                            '${group.songs.length} ${group.songs.length == 1 ? "cifra" : "cifras"}',
+                                                            style:
+                                                                const TextStyle(
+                                                              color: AppCores
+                                                                  .roxo,
+                                                              fontSize: 11,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .bold,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  // Músicas do Artista (em ordem alfabética)
+                                                  ListView.separated(
+                                                    shrinkWrap: true,
+                                                    physics:
+                                                        const NeverScrollableScrollPhysics(),
+                                                    padding: EdgeInsets.zero,
+                                                    itemCount:
+                                                        group.songs.length,
+                                                    separatorBuilder:
+                                                        (_, __) => Divider(
+                                                      height: 1,
+                                                      thickness: 0.8,
+                                                      color: isDark
+                                                          ? Colors.white10
+                                                          : Colors.black
+                                                              .withValues(
+                                                                  alpha: 0.05),
+                                                    ),
+                                                    itemBuilder:
+                                                        (context, songIdx) {
+                                                      final item =
+                                                          group.songs[songIdx];
+                                                      final alreadyImported =
+                                                          _isAlreadyInUserList(
+                                                              item.song);
+                                                      final isMine =
+                                                          _isSharedByCurrentUser(
+                                                              item);
+
+                                                      return ListTile(
+                                                        contentPadding:
+                                                            const EdgeInsets
+                                                                .symmetric(
+                                                          horizontal: 12,
+                                                          vertical: 3,
+                                                        ),
+                                                        leading:
+                                                            _buildSongArtwork(
+                                                          item,
+                                                          size: 42,
+                                                          borderRadius: 10,
+                                                        ),
+                                                        title: Text(
+                                                          item.song.title,
+                                                          style:
+                                                              const TextStyle(
+                                                            fontWeight:
+                                                                FontWeight
+                                                                    .w700,
+                                                            fontSize: 13.5,
+                                                          ),
+                                                          maxLines: 1,
+                                                          overflow:
+                                                              TextOverflow
+                                                                  .ellipsis,
+                                                        ),
+                                                        subtitle: Text(
+                                                          'Por @${item.sharedByNickname} em ${item.formattedDate}${item.importCount > 0 ? " • ${item.importCount} import(s)" : ""}',
+                                                          style: TextStyle(
+                                                            fontSize: 11.5,
+                                                            color: isDark
+                                                                ? Colors.grey[
+                                                                    400]
+                                                                : Colors.grey[
+                                                                    600],
+                                                          ),
+                                                          maxLines: 1,
+                                                          overflow:
+                                                              TextOverflow
+                                                                  .ellipsis,
+                                                        ),
+                                                        trailing: Row(
+                                                          mainAxisSize:
+                                                              MainAxisSize.min,
+                                                          children: [
+                                                            IconButton(
+                                                              tooltip:
+                                                                  'Visualizar cifra',
+                                                              visualDensity:
+                                                                  VisualDensity
+                                                                      .compact,
+                                                              icon: const Icon(
+                                                                Icons
+                                                                    .visibility_outlined,
+                                                                color: AppCores
+                                                                    .roxo,
+                                                                size: 20,
+                                                              ),
+                                                              onPressed: () =>
+                                                                  _openOnlineSongReader(
+                                                                      item,
+                                                                      visibleCommunitySongs),
+                                                            ),
+                                                            if (!alreadyImported)
+                                                              IconButton(
+                                                                tooltip:
+                                                                    'Importar para Minhas Cifras',
+                                                                visualDensity:
+                                                                    VisualDensity
+                                                                        .compact,
+                                                                icon: const Icon(
+                                                                  Icons
+                                                                      .download_for_offline_rounded,
+                                                                  color: AppCores
+                                                                      .roxo,
+                                                                  size: 20,
+                                                                ),
+                                                                onPressed: () =>
+                                                                    _importSong(
+                                                                        item),
+                                                              )
+                                                            else
+                                                              const Padding(
+                                                                padding:
+                                                                    EdgeInsets
+                                                                        .symmetric(
+                                                                            horizontal:
+                                                                                8),
+                                                                child: Tooltip(
+                                                                  message:
+                                                                      'Já importada na sua lista',
+                                                                  child: Icon(
+                                                                    Icons
+                                                                        .check_circle_rounded,
+                                                                    size: 19,
+                                                                    color: Colors
+                                                                        .green,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            if (isMine)
+                                                              IconButton(
+                                                                key: ValueKey(
+                                                                    'btn_list_unshare_${item.id}'),
+                                                                tooltip:
+                                                                    'Remover do compartilhamento',
+                                                                visualDensity:
+                                                                    VisualDensity
+                                                                        .compact,
+                                                                icon: const Icon(
+                                                                  Icons
+                                                                      .delete_outline_rounded,
+                                                                  color: Colors
+                                                                      .redAccent,
+                                                                  size: 19,
+                                                                ),
+                                                                onPressed: () =>
+                                                                    _unpublishCommunitySong(
+                                                                        item),
+                                                              ),
+                                                          ],
+                                                        ),
+                                                        onTap: () =>
+                                                            _openOnlineSongReader(
+                                                                item,
+                                                                visibleCommunitySongs),
+                                                      );
+                                                    },
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                          },
+                                        ),
                                       ),
-                                    ),
+                                    if (totalPages > 1)
+                                      SliverToBoxAdapter(
+                                        child: Padding(
+                                          padding: const EdgeInsets.only(
+                                              top: 4, bottom: 20),
+                                          child: _buildPaginationBar(
+                                            isDark,
+                                            isMobile,
+                                            safePage,
+                                            totalPages,
+                                            totalGroups,
+                                            totalSongs,
+                                          ),
+                                        ),
+                                      ),
                                   ],
                                 ),
                 ),

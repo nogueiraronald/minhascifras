@@ -465,6 +465,213 @@ void main() {
       expect(account.userNickname, 'autor_top');
       expect(account.canPostToCommunity, isTrue);
     });
+
+    testWidgets(
+      'Comunidade agrupa músicas por artista em ordem alfabética e lista músicas em ordem alfabética',
+      (tester) async {
+        final mockSongs = [
+          CommunitySong(
+            id: 'c1',
+            song: Song(id: 's1', title: 'Zeloso Amor', artist: 'Banda B', content: 'C G\nLetra'),
+            sharedByNickname: 'user1',
+            sharedByEmail: 'u1@test.com',
+            sharedAt: DateTime(2026, 11, 1),
+          ),
+          CommunitySong(
+            id: 'c2',
+            song: Song(id: 's2', title: 'Águas Claras', artist: 'Banda B', content: 'C G\nLetra'),
+            sharedByNickname: 'user1',
+            sharedByEmail: 'u1@test.com',
+            sharedAt: DateTime(2026, 11, 2),
+          ),
+          CommunitySong(
+            id: 'c3',
+            song: Song(id: 's3', title: 'Bendito Seja', artist: 'Artista A', content: 'C G\nLetra'),
+            sharedByNickname: 'user2',
+            sharedByEmail: 'u2@test.com',
+            sharedAt: DateTime(2026, 11, 3),
+          ),
+        ];
+
+        final community = _FakeCommunityService(initial: mockSongs);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: TelaComunidade(
+              repository: repo,
+              chords: chords,
+              account: account,
+              sync: sync,
+              setlists: setlists,
+              communityService: community,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Verifica que os artistas aparecem como cabeçalhos de grupos
+        expect(find.text('Artista A'), findsWidgets);
+        expect(find.text('Banda B'), findsWidgets);
+
+        // Verifica a contagem de cifras por artista
+        expect(find.text('1 cifra'), findsOneWidget); // Artista A
+        expect(find.text('2 cifras'), findsOneWidget); // Banda B
+
+        // Músicas estão visíveis (tanto no carrossel quanto nos grupos de artista)
+        expect(find.text('Bendito Seja'), findsWidgets);
+        expect(find.text('Águas Claras'), findsWidgets);
+        expect(find.text('Zeloso Amor'), findsWidgets);
+      },
+    );
+
+    testWidgets(
+      'Autocomplete no TextField exibe sugestões de artistas e músicas e permite filtrar ao clicar',
+      (tester) async {
+        final mockSongs = [
+          CommunitySong(
+            id: 'c1',
+            song: Song(id: 's1', title: 'A Barca', artist: 'Padre Zezinho', content: 'C G\nLetra'),
+            sharedByNickname: 'user1',
+            sharedByEmail: 'u1@test.com',
+            sharedAt: DateTime(2026, 11, 1),
+          ),
+          CommunitySong(
+            id: 'c2',
+            song: Song(id: 's2', title: 'Oração Pela Família', artist: 'Padre Zezinho', content: 'C G\nLetra'),
+            sharedByNickname: 'user1',
+            sharedByEmail: 'u1@test.com',
+            sharedAt: DateTime(2026, 11, 2),
+          ),
+        ];
+
+        final community = _FakeCommunityService(initial: mockSongs);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: TelaComunidade(
+              repository: repo,
+              chords: chords,
+              account: account,
+              sync: sync,
+              setlists: setlists,
+              communityService: community,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Digita "padre" no campo de busca
+        final searchField = find.byType(TextField);
+        await tester.enterText(searchField, 'padre');
+        await tester.pumpAndSettle();
+
+        // Painel de sugestões deve aparecer sugerindo o Artista
+        expect(find.text('Sugestões de busca:'), findsOneWidget);
+        expect(find.byKey(const ValueKey('suggestion_artist_Padre Zezinho')), findsOneWidget);
+
+        // Ao tocar na sugestão, preenche a busca e filtra
+        await tester.tap(find.byKey(const ValueKey('suggestion_artist_Padre Zezinho')));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Padre Zezinho'), findsWidgets);
+      },
+    );
+
+    testWidgets(
+      'Paginação na comunidade divide grupos de artistas e permite navegar entre páginas',
+      (tester) async {
+        // Criar 7 artistas diferentes (cada página exibe até 5 artistas)
+        final mockSongs = List.generate(
+          7,
+          (i) => CommunitySong(
+            id: 'comm_$i',
+            song: Song(
+              id: 'song_$i',
+              title: 'Música $i',
+              artist: 'Artista ${String.fromCharCode(65 + i)}',
+              content: 'C G\nLetra $i',
+            ),
+            sharedByNickname: 'user',
+            sharedByEmail: 'user@test.com',
+            sharedAt: DateTime(2026, 11, i + 1),
+          ),
+        );
+
+        final community = _FakeCommunityService(initial: mockSongs);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: TelaComunidade(
+              repository: repo,
+              chords: chords,
+              account: account,
+              sync: sync,
+              setlists: setlists,
+              communityService: community,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // 7 artistas / 5 por página -> 2 páginas (1 / 2)
+        expect(find.text('1 / 2'), findsWidgets);
+
+        // Clica para ir para a próxima página
+        final nextBtn = find.byKey(const ValueKey('btn_community_next_page')).first;
+        await tester.tap(nextBtn);
+        await tester.pumpAndSettle();
+
+        // Agora está na página 2 / 2
+        expect(find.text('2 / 2'), findsWidgets);
+
+        // Clica para voltar para a página anterior
+        final prevBtn = find.byKey(const ValueKey('btn_community_prev_page')).first;
+        await tester.tap(prevBtn);
+        await tester.pumpAndSettle();
+
+        expect(find.text('1 / 2'), findsWidgets);
+      },
+    );
+
+    testWidgets(
+      'Navegação mobile: voltar de Minhas Cifras retorna à Tela Inicial',
+      (tester) async {
+        tester.view.physicalSize = const Size(390, 844);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() => tester.view.resetPhysicalSize());
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: TelaInicial(
+              repository: repo,
+              chords: chords,
+              account: account,
+              sync: sync,
+              setlists: setlists,
+              musicThemes: musicThemes,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Clica no card "Minhas Cifras"
+        await tester.tap(find.text('Minhas Cifras'));
+        await tester.pumpAndSettle();
+
+        // Está dentro de Minhas Cifras (MainScreen)
+        expect(find.byKey(const ValueKey('app_main_scaffold')), findsOneWidget);
+
+        // No celular, clica no botão voltar ao início na AppBar
+        final backBtn = find.byTooltip('Voltar ao Início');
+        expect(backBtn, findsOneWidget);
+        await tester.tap(backBtn);
+        await tester.pumpAndSettle();
+
+        // Retornou para a TelaInicial com sucesso
+        expect(find.byKey(const ValueKey('home_screen_scaffold')), findsOneWidget);
+        expect(find.text('Comunidade'), findsOneWidget);
+      },
+    );
   });
 }
 

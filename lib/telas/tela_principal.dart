@@ -1136,6 +1136,32 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
+  void _voltarParaInicio() {
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    }
+  }
+
+  void _abrirComunidadeDireto() {
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    }
+    Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TelaComunidade(
+          repository: widget.repository,
+          chords: widget.chords,
+          account: widget.account,
+          sync: widget.sync,
+          setlists: widget.setlists,
+          theme: widget.theme,
+          communityService: widget.communityService,
+        ),
+      ),
+    );
+  }
+
   Future<void> _createManualSong() async {
     final created = await Navigator.push<Song>(
       context,
@@ -3576,7 +3602,7 @@ class _MainScreenState extends State<MainScreen> {
                   if (Navigator.canPop(context)) ...[
                     BotaoVoltarInicio(
                       iconSize: 24,
-                      onTap: () => Navigator.maybePop(context),
+                      onTap: _voltarParaInicio,
                     ),
                     const SizedBox(width: 8),
                   ],
@@ -3584,7 +3610,7 @@ class _MainScreenState extends State<MainScreen> {
                     child: AppLogo(
                       iconSize: 24,
                       onTap: Navigator.canPop(context)
-                          ? () => Navigator.maybePop(context)
+                          ? _voltarParaInicio
                           : null,
                     ),
                   ),
@@ -3616,11 +3642,57 @@ class _MainScreenState extends State<MainScreen> {
                 ],
               ),
               const SizedBox(height: 10),
-              // Ação Principal: Nova Cifra
-              BotaoGradiente(
-                onPressed: _createManualSong,
-                icon: Icons.add_rounded,
-                label: 'Nova Cifra',
+              // Ações Principais: Nova Cifra e Acesso Rápido à Comunidade
+              Row(
+                children: [
+                  Expanded(
+                    child: BotaoGradiente(
+                      onPressed: _createManualSong,
+                      icon: Icons.add_rounded,
+                      label: 'Nova Cifra',
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Tooltip(
+                    message: 'Acessar a Comunidade',
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        key: const ValueKey('btn_sidebar_ir_comunidade'),
+                        borderRadius: BorderRadius.circular(10),
+                        onTap: _abrirComunidadeDireto,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 11),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: AppCores.roxo.withValues(alpha: 0.4),
+                              width: 1.2,
+                            ),
+                            color: AppCores.roxo.withValues(alpha: 0.08),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.public_rounded,
+                                  size: 17, color: AppCores.roxo),
+                              SizedBox(width: 5),
+                              Text(
+                                'Comunidade',
+                                style: TextStyle(
+                                  color: AppCores.roxo,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -4880,10 +4952,32 @@ class _MainScreenState extends State<MainScreen> {
                               ),
                           ],
                         ),
+                        leadingWidth: Navigator.canPop(context) ? 92 : 48,
                         leading: Builder(
-                          builder: (ctx) => IconButton(
-                            icon: const Icon(Icons.menu),
-                            onPressed: () => Scaffold.of(ctx).openDrawer(),
+                          builder: (ctx) => Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (Navigator.canPop(context))
+                                IconButton(
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(
+                                      minWidth: 38, minHeight: 38),
+                                  tooltip: 'Voltar ao Início',
+                                  icon: const Icon(Icons.arrow_back_rounded,
+                                      size: 22),
+                                  onPressed: _voltarParaInicio,
+                                ),
+                              IconButton(
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(
+                                    minWidth: 38, minHeight: 38),
+                                tooltip: 'Menu de cifras',
+                                icon: const Icon(Icons.menu_rounded, size: 22),
+                                onPressed: () => Scaffold.of(ctx).openDrawer(),
+                              ),
+                            ],
                           ),
                         ),
                         actions: [
@@ -4954,7 +5048,7 @@ class _MainScreenState extends State<MainScreen> {
                                 minWidth: 36, minHeight: 36),
                             onSelected: (val) async {
                               if (val == 'home') {
-                                Navigator.maybePop(context);
+                                _voltarParaInicio();
                               } else if (val == 'share_community') {
                                 if (_currentSong != null) {
                                   await _shareToCommunity([_currentSong!]);
