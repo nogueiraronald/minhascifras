@@ -891,12 +891,6 @@ class _TelaComunidadeState extends State<TelaComunidade> {
   }
 
   @override
-  void deactivate() {
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    super.deactivate();
-  }
-
-  @override
   void dispose() {
     _searchCtrl.dispose();
     _carouselCtrl.dispose();
@@ -905,6 +899,7 @@ class _TelaComunidadeState extends State<TelaComunidade> {
   }
 
   void _voltarParaInicio() {
+    ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
     if (Navigator.of(context).canPop()) {
       Navigator.of(context).pop();
     }
@@ -1071,8 +1066,9 @@ class _TelaComunidadeState extends State<TelaComunidade> {
       if (mounted) setState(() {});
     }
     if (!mounted) return;
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
+    final sm = ScaffoldMessenger.maybeOf(context);
+    sm?.hideCurrentSnackBar();
+    sm?.showSnackBar(
       SnackBar(
         duration: const Duration(seconds: 4),
         behavior: SnackBarBehavior.floating,
@@ -1086,6 +1082,7 @@ class _TelaComunidadeState extends State<TelaComunidade> {
           label: 'Ver Cifra',
           textColor: Colors.white,
           onPressed: () {
+            ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
             Navigator.pop(context, imported.id);
           },
         ),
@@ -2685,12 +2682,6 @@ class _TelaLeitorComunidadeOnlineState
     _currentIndex = _songList.isEmpty
         ? 0
         : widget.initialIndex.clamp(0, _songList.length - 1);
-  }
-
-  @override
-  void deactivate() {
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    super.deactivate();
   }
 
   @override
