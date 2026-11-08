@@ -25,7 +25,6 @@ import '../componentes/dialogo_acordes.dart';
 import '../componentes/visualizador_cifra.dart';
 import '../componentes/dialogo_nome.dart';
 import '../componentes/seletor_musicas.dart';
-import '../componentes/botao_sincronizacao.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../componentes/dialogo_login_desktop.dart';
@@ -1125,6 +1124,77 @@ class _MainScreenState extends State<MainScreen> {
         }
       } catch (e) {
         if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Erro ao remover da comunidade: $e'),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _confirmUnpublishAllSharedSongs() async {
+    final email = widget.account.email?.trim() ?? '';
+    if (email.isEmpty || _mySharedSongs.isEmpty) return;
+
+    final total = _mySharedSongs.length;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 24),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Remover Todas da Comunidade?',
+                style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'Deseja remover todas as $total cifra(s) que você compartilhou na comunidade?\n\n'
+          '• As cifras continuarão salvas normalmente na sua lista pessoal ("Minhas Cifras").\n'
+          '• Os usuários que já as importaram continuarão com elas.\n'
+          '• Todas deixarão de aparecer publicamente na aba Comunidade.',
+          style: const TextStyle(fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red[700]),
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.delete_sweep_rounded, size: 18),
+            label: Text('Sim, Remover Todas ($total)'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        setState(() => _isLoadingSharedSongs = true);
+        await _communityService.unpublishAllSongsByUser(userEmail: email);
+        await _loadMySharedSongs();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Todas as $total cifra(s) foram removidas da Comunidade com sucesso.',
+              ),
+              backgroundColor: Colors.green[800],
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isLoadingSharedSongs = false);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Erro ao remover da comunidade: $e'),
@@ -2793,6 +2863,18 @@ class _MainScreenState extends State<MainScreen> {
                 visualDensity: VisualDensity.compact,
                 onPressed: _loadMySharedSongs,
               ),
+              if (_mySharedSongs.isNotEmpty)
+                IconButton(
+                  key: const ValueKey('btn_unshare_all_shared_songs'),
+                  icon: const Icon(
+                    Icons.delete_sweep_rounded,
+                    size: 19,
+                    color: Colors.redAccent,
+                  ),
+                  tooltip: 'Remover todas da comunidade',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: _confirmUnpublishAllSharedSongs,
+                ),
               Icon(
                 _isSharedSectionExpanded
                     ? Icons.keyboard_arrow_up_rounded
@@ -2815,116 +2897,124 @@ class _MainScreenState extends State<MainScreen> {
                 ),
               )
             else
-              ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-                itemCount: _mySharedSongs.length,
-                separatorBuilder: (_, __) => const Divider(height: 1),
-                itemBuilder: (context, idx) {
-                  final item = _mySharedSongs[idx];
-                  return ListTile(
-                    dense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    leading: Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        gradient: AppCores.gradienteBotao,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        Icons.music_note_rounded,
-                        color: Colors.white,
-                        size: 16,
-                      ),
-                    ),
-                    title: Text(
-                      item.song.title,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    subtitle: Text(
-                      item.song.artist.isNotEmpty
-                          ? item.song.artist
-                          : 'Compartilhada em ${item.formattedDate}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: isDark ? Colors.grey[400] : Colors.grey[600],
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Badge de Imports elegante
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(context).height * 0.44,
+                ),
+                child: Scrollbar(
+                  thumbVisibility: true,
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                    itemCount: _mySharedSongs.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, idx) {
+                      final item = _mySharedSongs[idx];
+                      return ListTile(
+                        dense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        leading: Container(
+                          width: 32,
+                          height: 32,
                           decoration: BoxDecoration(
-                            color: AppCores.roxo
-                                .withValues(alpha: isDark ? 0.25 : 0.12),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: AppCores.roxo.withValues(alpha: 0.4),
-                              width: 1,
-                            ),
+                            gradient: AppCores.gradienteBotao,
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.download_rounded,
-                                size: 12,
-                                color: AppCores.roxo,
+                          child: const Icon(
+                            Icons.music_note_rounded,
+                            color: Colors.white,
+                            size: 16,
+                          ),
+                        ),
+                        title: Text(
+                          item.song.title,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          item.song.artist.isNotEmpty
+                              ? item.song.artist
+                              : 'Compartilhada em ${item.formattedDate}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark ? Colors.grey[400] : Colors.grey[600],
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Badge de Imports elegante
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
                               ),
-                              const SizedBox(width: 3),
-                              Text(
-                                '${item.importCount} import(s)',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w800,
-                                  color: AppCores.roxo,
+                              decoration: BoxDecoration(
+                                color: AppCores.roxo
+                                    .withValues(alpha: isDark ? 0.25 : 0.12),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: AppCores.roxo.withValues(alpha: 0.4),
+                                  width: 1,
                                 ),
                               ),
-                            ],
-                          ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.download_rounded,
+                                    size: 12,
+                                    color: AppCores.roxo,
+                                  ),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    '${item.importCount} import(s)',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppCores.roxo,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            IconButton(
+                              tooltip: 'Remover da comunidade',
+                              icon: const Icon(
+                                Icons.delete_outline_rounded,
+                                size: 18,
+                                color: Colors.redAccent,
+                              ),
+                              visualDensity: VisualDensity.compact,
+                              onPressed: () => _confirmUnpublishSharedSong(item),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 4),
-                        IconButton(
-                          tooltip: 'Remover da comunidade',
-                          icon: const Icon(
-                            Icons.delete_outline_rounded,
-                            size: 18,
-                            color: Colors.redAccent,
-                          ),
-                          visualDensity: VisualDensity.compact,
-                          onPressed: () => _confirmUnpublishSharedSong(item),
-                        ),
-                      ],
-                    ),
-                    onTap: () {
-                      final local = widget.repository.songs
-                          .where((s) => s.id == item.song.id)
-                          .firstOrNull;
-                      if (local != null) {
-                        _selectSong(local);
-                      } else {
-                        _selectSong(item.song);
-                      }
+                        onTap: () {
+                          final local = widget.repository.songs
+                              .where((s) => s.id == item.song.id)
+                              .firstOrNull;
+                          if (local != null) {
+                            _selectSong(local);
+                          } else {
+                            _selectSong(item.song);
+                          }
+                        },
+                      );
                     },
-                  );
-                },
+                  ),
+                ),
               ),
           ],
         ),
@@ -3675,7 +3765,6 @@ class _MainScreenState extends State<MainScreen> {
                       ),
                       onPressed: () => widget.theme!.toggle(context),
                     ),
-                  SyncButton(sync: widget.sync, account: widget.account),
                   AccountButton(
                     account: widget.account,
                     songs: widget.repository,

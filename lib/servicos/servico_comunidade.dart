@@ -247,6 +247,29 @@ class CommunityService {
     return updatedList;
   }
 
+  /// Remove todas as cifras compartilhadas pelo usuário especificado da comunidade
+  /// (apenas da exibição comunitária; usuários que já importaram mantêm suas cópias intactas).
+  Future<List<CommunitySong>> unpublishAllSongsByUser({
+    required String userEmail,
+  }) async {
+    final cleanEmail = userEmail.trim().toLowerCase();
+    if (cleanEmail.isEmpty) {
+      throw const FormatException(
+        'Faça login na sua conta para remover cifras compartilhadas.',
+      );
+    }
+
+    final current = await fetchCommunitySongs();
+    final updatedList = current.where((item) {
+      final isOwner = item.sharedByEmail.trim().toLowerCase() == cleanEmail;
+      return !isOwner;
+    }).toList()
+      ..sort((a, b) => b.sharedAt.compareTo(a.sharedAt));
+
+    await _saveCommunityFeed(updatedList);
+    return updatedList;
+  }
+
   Future<void> _saveCommunityFeed(List<CommunitySong> updatedList) async {
     final nicknamesRegistry = <String, String>{};
     for (final item in updatedList) {

@@ -116,6 +116,19 @@ class _FakeCommunityService extends CommunityService {
       ..sort((a, b) => b.sharedAt.compareTo(a.sharedAt));
     return List<CommunitySong>.of(onlineFeed);
   }
+
+  @override
+  Future<List<CommunitySong>> unpublishAllSongsByUser({
+    required String userEmail,
+  }) async {
+    final cleanEmail = userEmail.trim().toLowerCase();
+    onlineFeed = onlineFeed.where((item) {
+      final isOwner = item.sharedByEmail.trim().toLowerCase() == cleanEmail;
+      return !isOwner;
+    }).toList()
+      ..sort((a, b) => b.sharedAt.compareTo(a.sharedAt));
+    return List<CommunitySong>.of(onlineFeed);
+  }
 }
 
 void main() {
@@ -722,6 +735,74 @@ void main() {
 
         // Verifica o SnackBar com a opção 'Ver Cifra'
         expect(find.text('Ver Cifra'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Remover todas as cifras da comunidade exige confirmação e remove da lista compartilhada',
+      (tester) async {
+        final mock1 = CommunitySong(
+          id: 'comm-1',
+          song: Song(id: 's1', title: 'Cifra 1', artist: 'Artista 1', content: 'C\nLetra'),
+          sharedByNickname: 'meu_nick',
+          sharedByEmail: 'meu_email@teste.com',
+          sharedAt: DateTime(2026, 11, 8),
+        );
+        final mock2 = CommunitySong(
+          id: 'comm-2',
+          song: Song(id: 's2', title: 'Cifra 2', artist: 'Artista 2', content: 'D\nLetra'),
+          sharedByNickname: 'meu_nick',
+          sharedByEmail: 'meu_email@teste.com',
+          sharedAt: DateTime(2026, 11, 8),
+        );
+        final community = _FakeCommunityService(initial: [mock1, mock2]);
+
+        // Simula login
+        await account.loginWithEmailAndPassword(
+          emailInput: 'meu_email@teste.com',
+          passwordInput: 'senha123',
+          nicknameInput: 'meu_nick',
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: MainScreen(
+              repository: repo,
+              chords: chords,
+              account: account,
+              sync: sync,
+              setlists: setlists,
+              musicThemes: musicThemes,
+              communityService: community,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Vai para a aba Listas (índice 2)
+        await tester.tap(find.text('Listas (0)'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Compartilhadas na Comunidade'), findsOneWidget);
+
+        // O botão de remover todas deve existir no trailing
+        final unshareAllBtn = find.byKey(const ValueKey('btn_unshare_all_shared_songs'));
+        expect(unshareAllBtn, findsOneWidget);
+
+        // Clica no botão de remover todas
+        await tester.tap(unshareAllBtn);
+        await tester.pumpAndSettle();
+
+        // Diálogo de confirmação deve ser exibido
+        expect(find.text('Remover Todas da Comunidade?'), findsOneWidget);
+
+        // Confirma remoção
+        await tester.tap(find.textContaining('Sim, Remover Todas'));
+        await tester.pumpAndSettle();
+
+        // Verifica que foram removidas do serviço comunitário
+        final remaining = await community.fetchCommunitySongs();
+        expect(remaining.where((c) => c.sharedByEmail == 'meu_email@teste.com'), isEmpty);
       },
     );
   });

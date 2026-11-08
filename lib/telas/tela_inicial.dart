@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../componentes/botao_conta.dart';
-import '../componentes/botao_sincronizacao.dart';
 import '../componentes/dialogo_desbloqueio_conta.dart';
 import '../componentes/estilo_app.dart';
 import '../componentes/logo_aplicativo.dart';
@@ -337,7 +336,6 @@ class _TelaInicialState extends State<TelaInicial> {
               ),
               onPressed: () => widget.theme!.toggle(context),
             ),
-          SyncButton(sync: widget.sync, account: widget.account),
           AccountButton(
             account: widget.account,
             songs: widget.repository,

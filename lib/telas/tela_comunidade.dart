@@ -1937,6 +1937,41 @@ class _TelaComunidadeState extends State<TelaComunidade> {
       builder: (context, _) {
         return Scaffold(
           key: const ValueKey('community_screen_scaffold'),
+          bottomNavigationBar: (totalPages > 1 &&
+                  !_loading &&
+                  _error == null &&
+                  groups.isNotEmpty)
+              ? Container(
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF0F172A) : Colors.white,
+                    border: Border(
+                      top: BorderSide(
+                        color: isDark ? Colors.white12 : Colors.black12,
+                        width: 1,
+                      ),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black
+                            .withValues(alpha: isDark ? 0.35 : 0.08),
+                        blurRadius: 8,
+                        offset: const Offset(0, -2),
+                      ),
+                    ],
+                  ),
+                  child: SafeArea(
+                    top: false,
+                    child: _buildPaginationBar(
+                      isDark,
+                      isMobile,
+                      safePage,
+                      totalPages,
+                      totalGroups,
+                      totalSongs,
+                    ),
+                  ),
+                )
+              : null,
           appBar: AppBar(
             automaticallyImplyLeading: false,
             titleSpacing: 12,
@@ -2199,16 +2234,6 @@ class _TelaComunidadeState extends State<TelaComunidade> {
                                               ),
                                           ],
                                         ),
-                                      ),
-                                    ),
-                                    SliverToBoxAdapter(
-                                      child: _buildPaginationBar(
-                                        isDark,
-                                        isMobile,
-                                        safePage,
-                                        totalPages,
-                                        totalGroups,
-                                        totalSongs,
                                       ),
                                     ),
                                     if (groups.isEmpty)
@@ -2582,21 +2607,11 @@ class _TelaComunidadeState extends State<TelaComunidade> {
                                           },
                                         ),
                                       ),
-                                    if (totalPages > 1)
-                                      SliverToBoxAdapter(
-                                        child: Padding(
-                                          padding: const EdgeInsets.only(
-                                              top: 4, bottom: 20),
-                                          child: _buildPaginationBar(
-                                            isDark,
-                                            isMobile,
-                                            safePage,
-                                            totalPages,
-                                            totalGroups,
-                                            totalSongs,
-                                          ),
-                                        ),
+                                    SliverToBoxAdapter(
+                                      child: SizedBox(
+                                        height: totalPages > 1 ? 28 : 12,
                                       ),
+                                    ),
                                   ],
                                 ),
                 ),

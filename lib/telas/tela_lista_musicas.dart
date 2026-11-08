@@ -12,7 +12,6 @@ import '../servicos/servico_exportacao.dart';
 import '../servicos/servico_sincronizacao.dart';
 import '../componentes/botao_conta.dart';
 import '../componentes/dialogo_importar_link.dart';
-import '../componentes/botao_sincronizacao.dart';
 import 'tela_listas_repertorio.dart';
 import 'tela_edicao_cifra.dart';
 import 'tela_leitor_cifra.dart';
@@ -162,7 +161,6 @@ class SongListScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Minhas cifras'),
         actions: [
-          SyncButton(sync: sync, account: account),
           AccountButton(
             account: account,
             songs: repository,
