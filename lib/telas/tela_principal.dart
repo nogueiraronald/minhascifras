@@ -208,6 +208,7 @@ class _MainScreenState extends State<MainScreen> {
       _ensureFirstSongSelected();
       _checkAccountLock();
       _loadMySharedSongs();
+      ServicoAtualizacaoPwa.verificarEForcarAtualizacaoAoIniciar();
     });
   }
 
@@ -3808,6 +3809,7 @@ class _MainScreenState extends State<MainScreen> {
                     songs: widget.repository,
                     setlists: widget.setlists,
                     musicThemes: widget.musicThemes,
+                    chords: widget.chords,
                     sync: widget.sync,
                     compact: true,
                   ),
@@ -4440,6 +4442,7 @@ class _MainScreenState extends State<MainScreen> {
                                   songs: widget.repository,
                                   setlists: widget.setlists,
                                   musicThemes: widget.musicThemes,
+                                  chords: widget.chords,
                                   sync: widget.sync,
                                 );
                               },
@@ -5247,6 +5250,7 @@ class _MainScreenState extends State<MainScreen> {
                                   songs: widget.repository,
                                   setlists: widget.setlists,
                                   musicThemes: widget.musicThemes,
+                                  chords: widget.chords,
                                   sync: widget.sync,
                                 );
                               }

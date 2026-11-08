@@ -19,7 +19,13 @@ Future<void> main() async {
   final setlists = await SetlistRepository.open();
   final theme = await ThemeController.open();
   final musicThemes = await ThemeRepository.open();
-  final sync = SyncService(repository, setlists, account, musicThemes: musicThemes);
+  final sync = SyncService(
+    repository,
+    setlists,
+    account,
+    musicThemes: musicThemes,
+    chords: chords,
+  );
   // Não bloqueia a abertura: o app funciona offline mesmo sem login.
   unawaited(account.restore());
   runApp(CifrasApp(

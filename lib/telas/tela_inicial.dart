@@ -4,6 +4,7 @@ import '../componentes/botao_conta.dart';
 import '../componentes/dialogo_desbloqueio_conta.dart';
 import '../componentes/estilo_app.dart';
 import '../componentes/logo_aplicativo.dart';
+import '../servicos/servico_atualizacao_pwa.dart';
 import '../dados/biblioteca_acordes.dart';
 import '../dados/controlador_conta.dart';
 import '../dados/controlador_tema.dart';
@@ -53,6 +54,7 @@ class _TelaInicialState extends State<TelaInicial> {
     widget.account.addListener(_checkAccountLock);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAccountLock();
+      ServicoAtualizacaoPwa.verificarEForcarAtualizacaoAoIniciar();
     });
   }
 
@@ -90,8 +92,8 @@ class _TelaInicialState extends State<TelaInicial> {
     );
   }
 
-  void _openComunidade() {
-    Navigator.push<void>(
+  Future<void> _openComunidade() async {
+    final importedSongId = await Navigator.push<String?>(
       context,
       MaterialPageRoute(
         builder: (_) => TelaComunidade(
@@ -106,6 +108,9 @@ class _TelaInicialState extends State<TelaInicial> {
         ),
       ),
     );
+    if (mounted && importedSongId != null && importedSongId.isNotEmpty) {
+      _openMinhasCifras();
+    }
   }
 
   @override
@@ -341,6 +346,7 @@ class _TelaInicialState extends State<TelaInicial> {
             songs: widget.repository,
             setlists: widget.setlists,
             musicThemes: widget.musicThemes,
+            chords: widget.chords,
             sync: widget.sync,
             compact: isMobile,
           ),

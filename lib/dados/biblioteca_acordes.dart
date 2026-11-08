@@ -65,11 +65,32 @@ class ChordLibrary {
   static Future<ChordLibrary> open() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_key);
-    final map = raw == null
-        ? <String, String>{}
-        : Map<String, String>.from(jsonDecode(raw) as Map);
+    final map = <String, String>{};
+    if (raw != null) {
+      try {
+        final decoded = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+        for (final entry in decoded.entries) {
+          final val = entry.value.toString();
+          // Remove customizações obsoletas que coincidem exatamente com o padrão embutido
+          final defaultVal = _builtIn[entry.key] ??
+              _builtIn[ChordTransposer.enharmonic(entry.key)];
+          if (defaultVal != val && val.trim().isNotEmpty) {
+            map[entry.key] = val;
+          }
+        }
+      } catch (_) {}
+    }
     return ChordLibrary._(prefs, map);
   }
+
+  /// Retorna se um acorde possui customização salva pelo usuário.
+  bool isCustom(String chord) {
+    return _custom.containsKey(chord) ||
+        _custom.containsKey(ChordTransposer.enharmonic(chord));
+  }
+
+  /// Retorna o dicionário de acordes customizados pelo usuário.
+  Map<String, String> get customChords => Map.unmodifiable(_custom);
 
   ChordShape? find(String chord) {
     for (final name in {chord, ChordTransposer.enharmonic(chord)}) {
@@ -80,8 +101,58 @@ class ChordLibrary {
     return slash > 0 ? find(chord.substring(0, slash)) : null;
   }
 
+  /// Salva uma customização de acorde. Se o formato for igual ao padrão embutido,
+  /// não ocupa espaço na lista do usuário e restaura o padrão.
   Future<void> save(String chord, ChordShape shape) async {
-    _custom[chord] = shape.toText();
-    await _prefs.setString(_key, jsonEncode(_custom));
+    final text = shape.toText();
+    final defaultText =
+        _builtIn[chord] ?? _builtIn[ChordTransposer.enharmonic(chord)];
+
+    if (defaultText != null && defaultText == text) {
+      _custom.remove(chord);
+      _custom.remove(ChordTransposer.enharmonic(chord));
+    } else {
+      _custom[chord] = text;
+    }
+
+    if (_custom.isEmpty) {
+      await _prefs.remove(_key);
+    } else {
+      await _prefs.setString(_key, jsonEncode(_custom));
+    }
+  }
+
+  /// Restaura o acorde para o desenho padrão do aplicativo e remove da lista do usuário.
+  Future<void> restoreDefault(String chord) async {
+    _custom.remove(chord);
+    _custom.remove(ChordTransposer.enharmonic(chord));
+    if (_custom.isEmpty) {
+      await _prefs.remove(_key);
+    } else {
+      await _prefs.setString(_key, jsonEncode(_custom));
+    }
+  }
+
+  /// Limpa todas as customizações de acordes do usuário, mantendo 100% o padrão do app.
+  Future<void> clearAllCustom() async {
+    _custom.clear();
+    await _prefs.remove(_key);
+  }
+
+  /// Importa customizações de acordes (usado na sincronização).
+  Future<void> importCustomChords(Map<String, String> chords) async {
+    _custom.clear();
+    for (final entry in chords.entries) {
+      final defaultVal = _builtIn[entry.key] ??
+          _builtIn[ChordTransposer.enharmonic(entry.key)];
+      if (defaultVal != entry.value) {
+        _custom[entry.key] = entry.value;
+      }
+    }
+    if (_custom.isEmpty) {
+      await _prefs.remove(_key);
+    } else {
+      await _prefs.setString(_key, jsonEncode(_custom));
+    }
   }
 }

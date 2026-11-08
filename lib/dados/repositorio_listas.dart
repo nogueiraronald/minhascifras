@@ -31,8 +31,12 @@ class SetlistRepository extends ChangeNotifier {
           .toList();
     }
 
-    return SetlistRepository._(
-        prefs, load(_kLists, Setlist.fromJson), load(_kItems, SetlistItem.fromJson));
+    final rawLists = load(_kLists, Setlist.fromJson);
+    final rawItems = load(_kItems, SetlistItem.fromJson);
+    final activeLists = rawLists.where((e) => !e.deleted).toList();
+    final activeItems = rawItems.where((e) => !e.deleted).toList();
+
+    return SetlistRepository._(prefs, activeLists, activeItems);
   }
 
   List<Setlist> get setlists {
@@ -61,45 +65,32 @@ class SetlistRepository extends ChangeNotifier {
 
   /// Remove todas as ocorrências de uma música das setlists quando a música for excluída.
   Future<void> removeItemsForSong(String songId) async {
-    bool changed = false;
-    for (var i = 0; i < _items.length; i++) {
-      if (_items[i].songId == songId && !_items[i].deleted) {
-        _items[i] = _items[i].copyWith(deleted: true);
-        changed = true;
-      }
-    }
-    if (changed) {
+    final prevCount = _items.length;
+    _items.removeWhere((it) => it.songId == songId);
+    if (_items.length != prevCount) {
       await _persist();
+      notifyListeners();
     }
   }
 
   /// Limpa itens órfãos apontando para músicas deletadas ou inexistentes.
   Future<void> cleanupOrphanedItems(Iterable<String> activeSongIds) async {
     final set = activeSongIds.toSet();
-    bool changed = false;
-    for (var i = 0; i < _items.length; i++) {
-      if (!_items[i].deleted && !set.contains(_items[i].songId)) {
-        _items[i] = _items[i].copyWith(deleted: true);
-        changed = true;
-      }
-    }
-    if (changed) {
+    final prevCount = _items.length;
+    _items.removeWhere((it) => !set.contains(it.songId));
+    if (_items.length != prevCount) {
       await _persist();
+      notifyListeners();
     }
   }
 
   /// Remove todos os itens de setlists (quando todas as músicas forem excluídas).
   Future<void> removeAllItems() async {
-    bool changed = false;
-    for (var i = 0; i < _items.length; i++) {
-      if (!_items[i].deleted) {
-        _items[i] = _items[i].copyWith(deleted: true);
-        changed = true;
-      }
-    }
-    if (changed) {
+    if (_items.isNotEmpty) {
+      _items.clear();
       await _persist();
       onLocalChange?.call();
+      notifyListeners();
     }
   }
 
@@ -116,13 +107,20 @@ class SetlistRepository extends ChangeNotifier {
   }
 
   Future<void> removeSetlist(String id) async {
-    final i = _lists.indexWhere((e) => e.id == id);
-    if (i < 0) return;
-    _lists[i] = _lists[i].copyWith(deleted: true);
-    for (final it in itemsFor(id)) {
-      _replaceItem(it.copyWith(deleted: true));
-    }
+    _lists.removeWhere((e) => e.id == id);
+    _items.removeWhere((it) => it.setlistId == id);
     await _persist();
+    notifyListeners();
+  }
+
+  Future<void> removeItem(String itemId) async {
+    final i = _items.indexWhere((e) => e.id == itemId);
+    if (i < 0) return;
+    final listId = _items[i].setlistId;
+    _items.removeAt(i);
+    _renumber(listId, itemsFor(listId).map((e) => e.id).toList());
+    await _persist();
+    notifyListeners();
   }
 
   /// Limpa todas as setlists e itens locais para deslogar e começar um novo repertório do zero.
@@ -139,15 +137,6 @@ class SetlistRepository extends ChangeNotifier {
       _items.add(SetlistItem(
           id: const Uuid().v4(), setlistId: setlistId, songId: sid, position: pos++));
     }
-    await _persist();
-  }
-
-  Future<void> removeItem(String itemId) async {
-    final i = _items.indexWhere((e) => e.id == itemId);
-    if (i < 0) return;
-    final listId = _items[i].setlistId;
-    _items[i] = _items[i].copyWith(deleted: true);
-    _renumber(listId, itemsFor(listId).map((e) => e.id).toList());
     await _persist();
   }
 
@@ -204,11 +193,6 @@ class SetlistRepository extends ChangeNotifier {
       final i = _items.indexWhere((e) => e.id == ids[p]);
       if (i >= 0 && _items[i].position != p) _items[i] = _items[i].copyWith(position: p);
     }
-  }
-
-  void _replaceItem(SetlistItem it) {
-    final i = _items.indexWhere((e) => e.id == it.id);
-    if (i >= 0) _items[i] = it;
   }
 
   Future<void> _persist({bool local = true}) async {

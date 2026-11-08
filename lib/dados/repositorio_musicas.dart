@@ -33,6 +33,7 @@ class SongRepository extends ChangeNotifier {
                 updatedAt: s.updatedAt,
               );
             })
+            .where((s) => !s.deleted)
             .toList();
     final repo = SongRepository._(prefs, list);
     await repo.sanitizeSongMetadata();
@@ -109,9 +110,10 @@ class SongRepository extends ChangeNotifier {
   Future<void> remove(String id) async {
     final i = _songs.indexWhere((s) => s.id == id);
     if (i < 0) return;
-    _songs[i] = _songs[i].copyWith(deleted: true);
+    _songs.removeAt(i);
     await _persist();
     onLocalChange?.call();
+    notifyListeners();
   }
 
   /// Limpa todas as músicas locais para deslogar e começar um novo repertório do zero.

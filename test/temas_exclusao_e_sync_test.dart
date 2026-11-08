@@ -17,7 +17,7 @@ void main() {
     expect(themeRepo.themes.length, 0);
   });
 
-  test('ThemeRepository removeTheme remove o tema permanentemente e não o ressuscita ao reabrir', () async {
+  test('ThemeRepository removeTheme remove o tema permanentemente e não acumula registros inúteis', () async {
     final songRepo = await SongRepository.open();
     final themeRepo = await ThemeRepository.open();
 
@@ -27,42 +27,41 @@ void main() {
     // Remove o tema 'Baião'
     await themeRepo.removeTheme('Baião', songRepo);
     expect(themeRepo.themes.contains('Baião'), isFalse);
-    expect(themeRepo.deletedThemes.contains('baião'), isTrue);
 
     // Simula reabrir o app do SharedPreferences
     final themeRepoReopened = await ThemeRepository.open();
     expect(themeRepoReopened.themes.contains('Baião'), isFalse);
-    expect(themeRepoReopened.deletedThemes.contains('baião'), isTrue);
   });
 
-  test('ThemeRepository setThemes ignora temas que estão na lista de excluídos', () async {
+  test('ThemeRepository setThemes atualiza os temas ativos do usuário', () async {
     final songRepo = await SongRepository.open();
     final themeRepo = await ThemeRepository.open();
 
-    // Usuário excluiu 'Casamento'
+    await themeRepo.addTheme('Casamento');
+    expect(themeRepo.themes.contains('Casamento'), isTrue);
+
     await themeRepo.removeTheme('Casamento', songRepo);
     expect(themeRepo.themes.contains('Casamento'), isFalse);
 
-    // Sync tenta reinserir uma lista que contém 'Casamento'
-    await themeRepo.setThemes(['Adoração', 'Casamento', 'Louvor'], fromSync: true);
+    // Nova lista vinda de sincronização ou seleção
+    await themeRepo.setThemes(['Adoração', 'Louvor'], fromSync: true);
 
     expect(themeRepo.themes.contains('Casamento'), isFalse);
     expect(themeRepo.themes.contains('Adoração'), isTrue);
     expect(themeRepo.themes.contains('Louvor'), isTrue);
   });
 
-  test('ThemeRepository addTheme permite recriar tema previamente excluído', () async {
+  test('ThemeRepository addTheme permite recriar tema normalmente', () async {
     final songRepo = await SongRepository.open();
     final themeRepo = await ThemeRepository.open();
 
+    await themeRepo.addTheme('Blues');
     await themeRepo.removeTheme('Blues', songRepo);
     expect(themeRepo.themes.contains('Blues'), isFalse);
-    expect(themeRepo.deletedThemes.contains('blues'), isTrue);
 
     // Usuário decide recriar o tema
     await themeRepo.addTheme('Blues');
     expect(themeRepo.themes.contains('Blues'), isTrue);
-    expect(themeRepo.deletedThemes.contains('blues'), isFalse);
 
     // Ao reabrir, ele permanece presente
     final themeRepoReopened = await ThemeRepository.open();

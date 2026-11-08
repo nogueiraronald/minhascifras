@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../dados/controlador_conta.dart';
+import '../dados/biblioteca_acordes.dart';
 import '../dados/repositorio_listas.dart';
 import '../dados/repositorio_musicas.dart';
 import '../dados/repositorio_temas.dart';
@@ -28,6 +29,7 @@ class DesktopLoginDialog extends StatefulWidget {
     this.songs,
     this.setlists,
     this.musicThemes,
+    this.chords,
     this.sync,
     this.initialShowEmailLogin = true,
   });
@@ -36,6 +38,7 @@ class DesktopLoginDialog extends StatefulWidget {
   final SongRepository? songs;
   final SetlistRepository? setlists;
   final ThemeRepository? musicThemes;
+  final ChordLibrary? chords;
   final SyncService? sync;
   final bool initialShowEmailLogin;
 
@@ -45,6 +48,7 @@ class DesktopLoginDialog extends StatefulWidget {
     SongRepository? songs,
     SetlistRepository? setlists,
     ThemeRepository? musicThemes,
+    ChordLibrary? chords,
     SyncService? sync,
     bool initialShowEmailLogin = true,
   }) {
@@ -56,6 +60,7 @@ class DesktopLoginDialog extends StatefulWidget {
         songs: songs,
         setlists: setlists,
         musicThemes: musicThemes,
+        chords: chords,
         sync: sync,
         initialShowEmailLogin: initialShowEmailLogin,
       ),
@@ -126,12 +131,13 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
 
     try {
       final currentEmail = widget.account.userEmail;
-      final isDifferentUser = currentEmail == null ||
+      final isDifferentUser = currentEmail != null &&
           currentEmail.toLowerCase() != email.toLowerCase();
       if (isDifferentUser) {
         await widget.songs?.clearAll();
         await widget.setlists?.clearAll();
         await widget.musicThemes?.resetToDefault();
+        await widget.chords?.clearAllCustom();
       }
 
       final remoteSongCount = await widget.account.loginWithEmailAndPassword(
@@ -518,6 +524,7 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
       await widget.songs?.clearAll();
       await widget.setlists?.clearAll();
       await widget.musicThemes?.resetToDefault();
+      await widget.chords?.clearAllCustom();
       final newCode = await widget.account.resetToNewAccount();
 
       if (mounted) {

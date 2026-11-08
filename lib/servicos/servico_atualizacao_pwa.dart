@@ -8,4 +8,9 @@ class ServicoAtualizacaoPwa {
   static Future<void> verificarAtualizacao(BuildContext context) async {
     await impl.verificarAtualizacao(context);
   }
+
+  /// Verifica ao iniciar o app e, se houver nova versão, força a atualização imediatamente sem esperar o usuário.
+  static Future<void> verificarEForcarAtualizacaoAoIniciar() async {
+    await impl.verificarEForcarAtualizacaoAoIniciar();
+  }
 }

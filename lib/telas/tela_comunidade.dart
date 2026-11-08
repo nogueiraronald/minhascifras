@@ -324,7 +324,7 @@ class TelaComunidade extends StatefulWidget {
   }) async {
     final userSongs = repository.songs;
     if (userSongs.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         const SnackBar(
           content: Text(
               'Sua lista "Minhas Cifras" está vazia. Cadastre uma música antes de compartilhar.'),
@@ -677,9 +677,9 @@ class TelaComunidade extends StatefulWidget {
                                                                 true;
                                                           });
                                                           if (context.mounted) {
-                                                            ScaffoldMessenger.of(
+                                                            ScaffoldMessenger.maybeOf(
                                                                     context)
-                                                                .showSnackBar(
+                                                                ?.showSnackBar(
                                                               SnackBar(
                                                                 content: Text(
                                                                   '"${s.title}" removida do compartilhamento na comunidade.',
@@ -804,8 +804,8 @@ class TelaComunidade extends StatefulWidget {
                                     if (!ctx.mounted) return;
                                     Navigator.pop(ctx, updated);
                                     if (context.mounted) {
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
+                                      ScaffoldMessenger.maybeOf(context)
+                                          ?.showSnackBar(
                                         SnackBar(
                                           content: Text(
                                             '${chosenSongs.length} cifra(s) compartilhada(s) na Comunidade com sucesso!',
@@ -859,6 +859,8 @@ class CommunityArtistGroup {
 }
 
 class _TelaComunidadeState extends State<TelaComunidade> {
+  final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey =
+      GlobalKey<ScaffoldMessengerState>();
   late final CommunityService _service =
       widget.communityService ?? CommunityService();
 
@@ -873,6 +875,7 @@ class _TelaComunidadeState extends State<TelaComunidade> {
   int _carouselIndex = 0;
   int _currentPage = 1;
   bool _showSuggestions = false;
+  String? _lastImportedSongId;
   static const int _artistsPerPage = 5;
 
   @override
@@ -899,10 +902,24 @@ class _TelaComunidadeState extends State<TelaComunidade> {
   }
 
   void _voltarParaInicio() {
-    ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
+    try {
+      (_scaffoldMessengerKey.currentState ??
+              ScaffoldMessenger.maybeOf(context))
+          ?.hideCurrentSnackBar();
+    } catch (_) {}
     if (Navigator.of(context).canPop()) {
-      Navigator.of(context).pop();
+      Navigator.of(context).pop(_lastImportedSongId);
     }
+  }
+
+  void _showSnackBar(SnackBar snackBar) {
+    if (!mounted) return;
+    try {
+      final sm = _scaffoldMessengerKey.currentState ??
+          ScaffoldMessenger.maybeOf(context);
+      sm?.hideCurrentSnackBar();
+      sm?.showSnackBar(snackBar);
+    } catch (_) {}
   }
 
   void _selectSearchSuggestion(String term) {
@@ -1031,6 +1048,7 @@ class _TelaComunidadeState extends State<TelaComunidade> {
       communitySong: item,
       repository: widget.repository,
     );
+    _lastImportedSongId = imported.id;
 
     // 1. Cria ou adiciona automaticamente à lista 'Importadas da Comunidade' na aba Listas
     try {
@@ -1066,9 +1084,7 @@ class _TelaComunidadeState extends State<TelaComunidade> {
       if (mounted) setState(() {});
     }
     if (!mounted) return;
-    final sm = ScaffoldMessenger.maybeOf(context);
-    sm?.hideCurrentSnackBar();
-    sm?.showSnackBar(
+    _showSnackBar(
       SnackBar(
         duration: const Duration(seconds: 4),
         behavior: SnackBarBehavior.floating,
@@ -1082,7 +1098,11 @@ class _TelaComunidadeState extends State<TelaComunidade> {
           label: 'Ver Cifra',
           textColor: Colors.white,
           onPressed: () {
-            ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
+            try {
+              (_scaffoldMessengerKey.currentState ??
+                      ScaffoldMessenger.maybeOf(context))
+                  ?.hideCurrentSnackBar();
+            } catch (_) {}
             Navigator.pop(context, imported.id);
           },
         ),
@@ -1134,7 +1154,7 @@ class _TelaComunidadeState extends State<TelaComunidade> {
         _communitySongs = updated;
         _carouselIndex = 0;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
+      _showSnackBar(
         SnackBar(
           content: Text(
             '"${item.song.title}" foi removida do compartilhamento na comunidade.',
@@ -1143,7 +1163,7 @@ class _TelaComunidadeState extends State<TelaComunidade> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      _showSnackBar(
         SnackBar(
           content: Text(
             e.toString().replaceFirst(RegExp(r'^(Exception|FormatException):\s*'), ''),
@@ -1943,8 +1963,19 @@ class _TelaComunidadeState extends State<TelaComunidade> {
     return ListenableBuilder(
       listenable: Listenable.merge([widget.account, widget.repository]),
       builder: (context, _) {
-        return Scaffold(
-          key: const ValueKey('community_screen_scaffold'),
+        return ScaffoldMessenger(
+          key: _scaffoldMessengerKey,
+          child: PopScope(
+            canPop: true,
+            onPopInvokedWithResult: (didPop, result) {
+              try {
+                (_scaffoldMessengerKey.currentState ??
+                        ScaffoldMessenger.maybeOf(context))
+                    ?.hideCurrentSnackBar();
+              } catch (_) {}
+            },
+            child: Scaffold(
+              key: const ValueKey('community_screen_scaffold'),
           bottomNavigationBar: (totalPages > 1 &&
                   !_loading &&
                   _error == null &&
@@ -2027,6 +2058,7 @@ class _TelaComunidadeState extends State<TelaComunidade> {
                 songs: widget.repository,
                 setlists: widget.setlists,
                 musicThemes: widget.musicThemes,
+                chords: widget.chords,
                 sync: widget.sync,
                 compact: isMobile,
               ),
@@ -2626,9 +2658,11 @@ class _TelaComunidadeState extends State<TelaComunidade> {
               ],
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
+  },
+);
   }
 }
 
@@ -2933,7 +2967,8 @@ class _TelaLeitorComunidadeOnlineState
       focusNode: _readerFocusNode,
       autofocus: true,
       onKeyEvent: (node, event) => _handleKeyEvent(event),
-      child: Scaffold(
+      child: ScaffoldMessenger(
+        child: Scaffold(
         appBar: AppBar(
           titleSpacing: 4,
           title: Column(
@@ -3503,8 +3538,9 @@ class _TelaLeitorComunidadeOnlineState
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildModeButton(int index, String label, IconData icon) {
     final isSelected = _modeIndex == index;

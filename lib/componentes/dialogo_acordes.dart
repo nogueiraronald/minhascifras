@@ -75,8 +75,32 @@ class _ChordDialogState extends State<_ChordDialog> {
       _shape = shape;
       _editing = false;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
       SnackBar(content: Text('Acorde "${widget.chord}" salvo com sucesso!')),
+    );
+  }
+
+  Future<void> _restoreDefault() async {
+    await widget.library.restoreDefault(widget.chord);
+    if (!mounted) return;
+    final defaultShape = widget.library.find(widget.chord);
+    setState(() {
+      _shape = defaultShape;
+      _editing = false;
+      if (defaultShape != null) {
+        _editFrets = List<int>.from(defaultShape.frets);
+        _editFingers = defaultShape.fingers != null
+            ? List<int>.from(defaultShape.fingers!)
+            : List.filled(6, 0);
+        _selectedBaseFret = defaultShape.baseFret;
+      }
+    });
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(
+        content: Text(
+          'Acorde "${widget.chord}" restaurado para o padrão do app.',
+        ),
+      ),
     );
   }
 
@@ -289,8 +313,18 @@ class _ChordDialogState extends State<_ChordDialog> {
           ),
           const SizedBox(height: 22),
           Row(
-            mainAxisAlignment: MainAxisAlignment.end,
             children: [
+              if (widget.library.isCustom(widget.chord))
+                TextButton.icon(
+                  onPressed: _restoreDefault,
+                  icon: const Icon(Icons.restart_alt_rounded, size: 16),
+                  label: const Text('Restaurar Padrão', style: TextStyle(fontSize: 12)),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.amber[800],
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+              const Spacer(),
               TextButton(
                 onPressed: () {
                   if (_editing && _shape != null) {

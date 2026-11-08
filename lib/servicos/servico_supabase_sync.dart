@@ -91,6 +91,11 @@ class SupabaseSyncService {
     final setlistsRaw = (dados['setlists'] as List?) ?? [];
     final itemsRaw = (dados['items'] as List?) ?? [];
     final themesRaw = (dados['themes'] as List?) ?? [];
+    final customChordsRaw = (dados['customChords'] as Map<String, dynamic>?) ??
+        (dados['custom_chords'] as Map<String, dynamic>?) ??
+        {};
+    final customChords = customChordsRaw
+        .map((k, v) => MapEntry(k.toString(), v.toString()));
     final deletedSongIds = ((dados['deletedSongIds'] as List?) ?? [])
         .map((e) => e.toString())
         .toList();
@@ -128,6 +133,7 @@ class SupabaseSyncService {
           .map((e) => e.toString().trim())
           .where((t) => t.isNotEmpty)
           .toList(),
+      customChords: customChords,
       deletedSongIds: deletedSongIds,
       deletedSongKeys: deletedSongKeys,
       deletedSetlistIds: deletedSetlistIds,
@@ -239,15 +245,20 @@ class SupabaseSyncService {
     final uri = Uri.parse('${AppConfig.supabaseUrl}/rest/v1/repertorios_sync');
 
     final dadosMap = <String, dynamic>{
-      'songs': data.songs.map((s) => s.toJson()).toList(),
-      'setlists': data.setlists.map((s) => s.toJson()).toList(),
-      'items': data.items.map((i) => i.toJson()).toList(),
+      'songs': data.songs
+          .where((s) => !s.deleted)
+          .map((s) => s.toJson())
+          .toList(),
+      'setlists': data.setlists
+          .where((s) => !s.deleted)
+          .map((s) => s.toJson())
+          .toList(),
+      'items': data.items
+          .where((i) => !i.deleted)
+          .map((i) => i.toJson())
+          .toList(),
       'themes': data.themes,
-      if (data.deletedThemes.isNotEmpty) 'deletedThemes': data.deletedThemes,
-      'deletedSongIds': data.deletedSongIds,
-      'deletedSongKeys': data.deletedSongKeys,
-      'deletedSetlistIds': data.deletedSetlistIds,
-      'deletedItemIds': data.deletedItemIds,
+      if (data.customChords.isNotEmpty) 'customChords': data.customChords,
     };
     if (data.passwordHash != null && data.passwordHash!.isNotEmpty) {
       dadosMap['senha_hash'] = data.passwordHash;

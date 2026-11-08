@@ -9,3 +9,7 @@ Future<void> verificarAtualizacao(BuildContext context) async {
     ),
   );
 }
+
+Future<void> verificarEForcarAtualizacaoAoIniciar() async {
+  // Desktop e plataformas nativas não requerem reload de Service Worker
+}

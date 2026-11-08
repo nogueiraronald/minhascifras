@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../dados/biblioteca_acordes.dart';
 import '../dados/controlador_conta.dart';
 import '../dados/repositorio_listas.dart';
 import '../dados/repositorio_musicas.dart';
@@ -15,6 +16,7 @@ class AccountButton extends StatelessWidget {
     this.songs,
     this.setlists,
     this.musicThemes,
+    this.chords,
     this.sync,
     this.compact = false,
   });
@@ -23,6 +25,7 @@ class AccountButton extends StatelessWidget {
   final SongRepository? songs;
   final SetlistRepository? setlists;
   final ThemeRepository? musicThemes;
+  final ChordLibrary? chords;
   final SyncService? sync;
   final bool compact;
 
@@ -33,6 +36,7 @@ class AccountButton extends StatelessWidget {
       songs: songs,
       setlists: setlists,
       musicThemes: musicThemes,
+      chords: chords,
       sync: sync,
     );
   }

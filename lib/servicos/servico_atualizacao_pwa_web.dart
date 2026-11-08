@@ -111,3 +111,51 @@ Future<void> verificarAtualizacao(BuildContext context) async {
     ),
   );
 }
+
+/// Verifica silenciosamente ao iniciar o app se existe atualização do app e força a atualização na hora.
+Future<void> verificarEForcarAtualizacaoAoIniciar() async {
+  if (html.window.navigator.onLine == false) return;
+
+  try {
+    // 1. Tenta acionar a atualização do Service Worker em segundo plano de forma segura
+    try {
+      if (js.context.hasProperty('forcarAtualizacaoPwa')) {
+        js.context.callMethod('forcarAtualizacaoPwa');
+      }
+    } catch (_) {}
+
+    // 2. Consulta version.json no servidor com timestamp anti-cache
+    final cacheBuster = DateTime.now().millisecondsSinceEpoch;
+    final res = await html.HttpRequest.request(
+      'version.json?t=$cacheBuster',
+      method: 'GET',
+      requestHeaders: {'Cache-Control': 'no-cache, no-store, must-revalidate'},
+    );
+
+    if (res.status == 200 && res.responseText != null) {
+      final data = jsonDecode(res.responseText!) as Map<String, dynamic>;
+      final serverBuild =
+          (data['buildVersion'] ?? data['version'] ?? '').toString();
+      final localBuild =
+          (html.window.localStorage['minhas_cifras_active_version'] ??
+                  js.context['minhasCifrasBuildVersion'] ??
+                  '')
+              .toString();
+
+      final pendingUpdate =
+          html.window.localStorage['mc_pending_update'] == 'true';
+
+      if ((serverBuild.isNotEmpty &&
+              localBuild.isNotEmpty &&
+              serverBuild != localBuild) ||
+          pendingUpdate) {
+        // Nova versão detectada! Força atualização imediatamente sem esperar o usuário.
+        html.window.localStorage['minhas_cifras_active_version'] = serverBuild;
+        html.window.localStorage.remove('mc_pending_update');
+        html.window.location.reload();
+      }
+    }
+  } catch (e) {
+    debugPrint('Aviso ao verificar atualização ao iniciar: $e');
+  }
+}

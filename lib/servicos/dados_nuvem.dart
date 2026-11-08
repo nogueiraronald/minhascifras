@@ -9,6 +9,7 @@ class CloudData {
     this.setlists = const [],
     this.items = const [],
     this.themes = const [],
+    this.customChords = const {},
     this.deletedSongIds = const [],
     this.deletedSongKeys = const [],
     this.deletedSetlistIds = const [],
@@ -22,6 +23,7 @@ class CloudData {
   final List<Setlist> setlists;
   final List<SetlistItem> items;
   final List<String> themes;
+  final Map<String, String> customChords;
   final List<String> deletedSongIds;
   final List<String> deletedSongKeys;
   final List<String> deletedSetlistIds;

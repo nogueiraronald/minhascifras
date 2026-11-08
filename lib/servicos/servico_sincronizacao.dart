@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../dados/controlador_conta.dart';
+import '../dados/biblioteca_acordes.dart';
 import '../dados/repositorio_listas.dart';
 import '../dados/repositorio_musicas.dart';
 import '../dados/repositorio_temas.dart';
@@ -21,8 +22,10 @@ class SyncService extends ChangeNotifier {
     this._setlists,
     this._account, {
     ThemeRepository? musicThemes,
+    ChordLibrary? chords,
     SupabaseSyncService? supabaseSync,
   })  : _musicThemes = musicThemes,
+        _chords = chords,
         _supabaseSync = supabaseSync ?? SupabaseSyncService() {
     _songs.onLocalChange = _schedule;
     _setlists.onLocalChange = _schedule;
@@ -34,6 +37,7 @@ class SyncService extends ChangeNotifier {
   final SetlistRepository _setlists;
   final AccountController _account;
   final ThemeRepository? _musicThemes;
+  final ChordLibrary? _chords;
   final SupabaseSyncService _supabaseSync;
 
   Timer? _debounce;
@@ -110,42 +114,6 @@ class SyncService extends ChangeNotifier {
       }
     }
 
-    // Se a nuvem informou IDs ou Chaves excluídas, exclui localmente apenas se a música
-    // não estiver ativa com alteração recente (ex: acabou de ser importada ou recriada pelo usuário).
-    final now = DateTime.now();
-    for (final deletedId in remote.deletedSongIds) {
-      final existing =
-          _songs.allSongs.where((s) => s.id == deletedId && !s.deleted).firstOrNull;
-      if (existing != null) {
-        if (now.difference(existing.updatedAt).inMinutes < 15) {
-          continue;
-        }
-        await _songs.remove(deletedId);
-      }
-    }
-    for (final deletedKey in remote.deletedSongKeys) {
-      final existing = _songs.allSongs
-          .where((s) =>
-              !s.deleted &&
-              '${s.title.trim().toLowerCase()}|${s.artist.trim().toLowerCase()}' ==
-                  deletedKey)
-          .firstOrNull;
-      if (existing != null) {
-        if (now.difference(existing.updatedAt).inMinutes < 15) {
-          continue;
-        }
-        await _songs.remove(existing.id);
-      }
-    }
-    for (final deletedId in remote.deletedSetlistIds) {
-      final existing = _setlists.allSetlists
-          .where((s) => s.id == deletedId && !s.deleted)
-          .firstOrNull;
-      if (existing != null) {
-        await _setlists.removeSetlist(deletedId);
-      }
-    }
-
     // 1. Reconciliação e desduplicação de músicas por (Título + Artista)
     final (songPull, songPush, localToRemoteSongIdMap) =
         _deduplicateAndMergeSongs(
@@ -174,73 +142,40 @@ class SyncService extends ChangeNotifier {
     }
 
     var themePush = false;
-    final allDeletedThemes = <String>{};
     if (_musicThemes != null) {
-      allDeletedThemes.addAll(remote.deletedThemes);
-      allDeletedThemes.addAll(_musicThemes.deletedThemes);
-
-      // Aplica exclusões remotas aos temas locais
-      for (final del in remote.deletedThemes) {
-        final dLower = del.trim().toLowerCase();
-        if (_musicThemes.themes.any((t) => t.toLowerCase() == dLower)) {
-          await _musicThemes.removeThemeFromSync(del);
-        }
-      }
-
-      // Adiciona novos temas da nuvem que NÃO foram excluídos pelo usuário
+      // Adiciona novos temas da nuvem
       for (final rTheme in remote.themes) {
         final rLower = rTheme.trim().toLowerCase();
-        if (!allDeletedThemes.contains(rLower) &&
-            !_musicThemes.themes.any((t) => t.toLowerCase() == rLower)) {
+        if (!_musicThemes.themes.any((t) => t.toLowerCase() == rLower)) {
           await _musicThemes.addThemeFromSync(rTheme);
         }
       }
 
-      // Se um tema local foi adicionado pelo usuário após ter sido excluído na nuvem,
-      // ele é retirado de allDeletedThemes
-      for (final t in _musicThemes.themes) {
-        allDeletedThemes.remove(t.toLowerCase().trim());
-      }
-
-      // Verifica se a lista de temas locais ou exclusões difere da nuvem
+      // Verifica se a lista de temas locais difere da nuvem
       final localThemeSet =
           _musicThemes.themes.map((t) => t.toLowerCase()).toSet();
       final remoteThemeSet =
           remote.themes.map((t) => t.toLowerCase()).toSet();
       if (localThemeSet.length != remoteThemeSet.length ||
-          !localThemeSet.containsAll(remoteThemeSet) ||
-          allDeletedThemes.length != remote.deletedThemes.length) {
+          !localThemeSet.containsAll(remoteThemeSet)) {
         themePush = true;
       }
     }
 
-    final activeLocalKeys = _songs.songs
-        .map((s) => '${s.title.trim().toLowerCase()}|${s.artist.trim().toLowerCase()}')
-        .toSet();
-    final activeLocalIds = _songs.songs.map((s) => s.id).toSet();
-
-    final allDeletedSongIds = {
-      ...remote.deletedSongIds,
-      ..._songs.allSongs.where((s) => s.deleted).map((s) => s.id),
-    }.where((id) => !activeLocalIds.contains(id)).toList();
-
-    final allDeletedSongKeys = {
-      ...remote.deletedSongKeys,
-      ..._songs.allSongs
-          .where((s) => s.deleted)
-          .map((s) =>
-              '${s.title.trim().toLowerCase()}|${s.artist.trim().toLowerCase()}'),
-    }.where((key) => !activeLocalKeys.contains(key)).toList();
-
-    final allDeletedSetlistIds = {
-      ...remote.deletedSetlistIds,
-      ..._setlists.allSetlists.where((s) => s.deleted).map((s) => s.id),
-    }.toList();
-
-    final allDeletedItemIds = {
-      ...remote.deletedItemIds,
-      ..._setlists.allItems.where((i) => i.deleted).map((i) => i.id),
-    }.toList();
+    // 4. Sincronização de acordes customizados (apenas deltas do usuário)
+    var chordPush = false;
+    if (_chords != null) {
+      if (remote.customChords.isNotEmpty && _chords.customChords.isEmpty) {
+        await _chords.importCustomChords(remote.customChords);
+      } else if (_chords.customChords.isNotEmpty) {
+        final remoteMap = remote.customChords;
+        final localMap = _chords.customChords;
+        if (remoteMap.length != localMap.length ||
+            !mapEquals(remoteMap, localMap)) {
+          chordPush = true;
+        }
+      }
+    }
 
     // Sempre envia o backup na primeira sincronização ou quando houver novidades locais ou senha alterada
     final isFirstUpload = remote.songs.isEmpty && _songs.songs.isNotEmpty;
@@ -248,14 +183,12 @@ class SyncService extends ChangeNotifier {
     final nicknameChanged = _account.userNickname != null &&
         _account.userNickname!.isNotEmpty &&
         _account.userNickname != remote.nickname;
-    final deletionsRevoked = allDeletedSongKeys.length < remote.deletedSongKeys.length ||
-        allDeletedSongIds.length < remote.deletedSongIds.length;
     if ((_account.userNickname == null || _account.userNickname!.isEmpty) &&
         remote.nickname != null &&
         remote.nickname!.isNotEmpty) {
       await _account.setNickname(remote.nickname!);
     }
-    if (songPush || setlistPush || itemPush || themePush || isFirstUpload || passwordChanged || nicknameChanged || deletionsRevoked) {
+    if (songPush || setlistPush || itemPush || themePush || chordPush || isFirstUpload || passwordChanged || nicknameChanged) {
       await _supabaseSync.writeAll(
         code,
         CloudData(
@@ -263,11 +196,7 @@ class SyncService extends ChangeNotifier {
           setlists: _setlists.setlists,
           items: _setlists.items,
           themes: _musicThemes?.themes ?? const [],
-          deletedSongIds: allDeletedSongIds,
-          deletedSongKeys: allDeletedSongKeys,
-          deletedSetlistIds: allDeletedSetlistIds,
-          deletedItemIds: allDeletedItemIds,
-          deletedThemes: allDeletedThemes.toList(),
+          customChords: _chords?.customChords ?? const {},
           passwordHash: _account.passwordHash,
           nickname: _account.userNickname ?? remote.nickname,
         ),
