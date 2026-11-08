@@ -891,6 +891,12 @@ class _TelaComunidadeState extends State<TelaComunidade> {
   }
 
   @override
+  void deactivate() {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    super.deactivate();
+  }
+
+  @override
   void dispose() {
     _searchCtrl.dispose();
     _carouselCtrl.dispose();
@@ -1065,8 +1071,13 @@ class _TelaComunidadeState extends State<TelaComunidade> {
       if (mounted) setState(() {});
     }
     if (!mounted) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
+        duration: const Duration(seconds: 4),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         content: Text(
           '"${item.song.title}" importada para Minhas Cifras com sucesso!',
         ),
@@ -1075,7 +1086,7 @@ class _TelaComunidadeState extends State<TelaComunidade> {
           label: 'Ver Cifra',
           textColor: Colors.white,
           onPressed: () {
-            _openOnlineSongReader(item);
+            Navigator.pop(context, imported.id);
           },
         ),
       ),
@@ -2674,6 +2685,12 @@ class _TelaLeitorComunidadeOnlineState
     _currentIndex = _songList.isEmpty
         ? 0
         : widget.initialIndex.clamp(0, _songList.length - 1);
+  }
+
+  @override
+  void deactivate() {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    super.deactivate();
   }
 
   @override

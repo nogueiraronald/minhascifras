@@ -54,7 +54,7 @@ class SongRepository extends ChangeNotifier {
     final cleanSong = song.copyWith(content: ChordTransposer.cleanText(song.content));
     final key = normKey(cleanSong.title, cleanSong.artist);
     final i = _songs.indexWhere((s) =>
-        s.id == cleanSong.id || (!s.deleted && normKey(s.title, s.artist) == key));
+        s.id == cleanSong.id || normKey(s.title, s.artist) == key);
     if (i >= 0) {
       final prevUpdatedAt = _songs[i].updatedAt;
       final nextUpdatedAt = cleanSong.updatedAt.isAfter(prevUpdatedAt)
@@ -70,6 +70,7 @@ class SongRepository extends ChangeNotifier {
     }
     await _persist();
     onLocalChange?.call();
+    notifyListeners();
   }
 
   Future<void> saveAll(List<Song> songs) async {
@@ -77,7 +78,7 @@ class SongRepository extends ChangeNotifier {
       final cleanSong = song.copyWith(content: ChordTransposer.cleanText(song.content));
       final key = normKey(cleanSong.title, cleanSong.artist);
       final i = _songs.indexWhere((s) =>
-          s.id == cleanSong.id || (!s.deleted && normKey(s.title, s.artist) == key));
+          s.id == cleanSong.id || normKey(s.title, s.artist) == key);
       if (i >= 0) {
         final prevUpdatedAt = _songs[i].updatedAt;
         final nextUpdatedAt = cleanSong.updatedAt.isAfter(prevUpdatedAt)
@@ -94,6 +95,7 @@ class SongRepository extends ChangeNotifier {
     }
     await _persist();
     onLocalChange?.call();
+    notifyListeners();
   }
 
   Future<void> toggleFavorite(String id) async {

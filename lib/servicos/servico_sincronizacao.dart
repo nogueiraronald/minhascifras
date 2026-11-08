@@ -110,11 +110,16 @@ class SyncService extends ChangeNotifier {
       }
     }
 
-    // Se a nuvem informou IDs ou Chaves excluídas, exclui localmente também
+    // Se a nuvem informou IDs ou Chaves excluídas, exclui localmente apenas se a música
+    // não estiver ativa com alteração recente (ex: acabou de ser importada ou recriada pelo usuário).
+    final now = DateTime.now();
     for (final deletedId in remote.deletedSongIds) {
       final existing =
           _songs.allSongs.where((s) => s.id == deletedId && !s.deleted).firstOrNull;
       if (existing != null) {
+        if (now.difference(existing.updatedAt).inMinutes < 15) {
+          continue;
+        }
         await _songs.remove(deletedId);
       }
     }
@@ -126,6 +131,9 @@ class SyncService extends ChangeNotifier {
                   deletedKey)
           .firstOrNull;
       if (existing != null) {
+        if (now.difference(existing.updatedAt).inMinutes < 15) {
+          continue;
+        }
         await _songs.remove(existing.id);
       }
     }
@@ -168,10 +176,15 @@ class SyncService extends ChangeNotifier {
       await _musicThemes.setThemes(remote.themes);
     }
 
+    final activeLocalKeys = _songs.songs
+        .map((s) => '${s.title.trim().toLowerCase()}|${s.artist.trim().toLowerCase()}')
+        .toSet();
+    final activeLocalIds = _songs.songs.map((s) => s.id).toSet();
+
     final allDeletedSongIds = {
       ...remote.deletedSongIds,
       ..._songs.allSongs.where((s) => s.deleted).map((s) => s.id),
-    }.toList();
+    }.where((id) => !activeLocalIds.contains(id)).toList();
 
     final allDeletedSongKeys = {
       ...remote.deletedSongKeys,
@@ -179,7 +192,7 @@ class SyncService extends ChangeNotifier {
           .where((s) => s.deleted)
           .map((s) =>
               '${s.title.trim().toLowerCase()}|${s.artist.trim().toLowerCase()}'),
-    }.toList();
+    }.where((key) => !activeLocalKeys.contains(key)).toList();
 
     final allDeletedSetlistIds = {
       ...remote.deletedSetlistIds,
@@ -197,12 +210,14 @@ class SyncService extends ChangeNotifier {
     final nicknameChanged = _account.userNickname != null &&
         _account.userNickname!.isNotEmpty &&
         _account.userNickname != remote.nickname;
+    final deletionsRevoked = allDeletedSongKeys.length < remote.deletedSongKeys.length ||
+        allDeletedSongIds.length < remote.deletedSongIds.length;
     if ((_account.userNickname == null || _account.userNickname!.isEmpty) &&
         remote.nickname != null &&
         remote.nickname!.isNotEmpty) {
       await _account.setNickname(remote.nickname!);
     }
-    if (songPush || setlistPush || itemPush || isFirstUpload || passwordChanged || nicknameChanged) {
+    if (songPush || setlistPush || itemPush || isFirstUpload || passwordChanged || nicknameChanged || deletionsRevoked) {
       await _supabaseSync.writeAll(
         code,
         CloudData(
@@ -264,13 +279,20 @@ class SyncService extends ChangeNotifier {
     }
 
     // Compara músicas locais com as da nuvem
+    final now = DateTime.now();
     for (final l in local) {
       final key = normKey(l.title, l.artist);
       final r = remoteByKey[key];
 
-      // Se a música foi excluída na nuvem (por chave ou ID), não re-envia
+      // Se a música foi excluída na nuvem (por chave ou ID):
+      // Se o usuário local a reativou ou importou recentemente (!l.deleted e alterada nos últimos 15 min),
+      // trata como restauração explícita (ressurreição) e envia para a nuvem.
       if (deletedKeySet.contains(key) || deletedIdSet.contains(l.id)) {
-        continue;
+        if (!l.deleted && now.difference(l.updatedAt).inMinutes < 15) {
+          push = true;
+        } else {
+          continue;
+        }
       }
 
       if (r == null) {

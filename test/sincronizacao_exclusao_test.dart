@@ -73,4 +73,55 @@ void main() {
     expect(repo.songs.length, 1);
     expect(repo.songs.first.content, 'C G Am');
   });
+
+  test('SongRepository.save reativa música previamente excluída', () async {
+    SharedPreferences.setMockInitialValues({});
+    final repo = await SongRepository.open();
+
+    final m1 = Song(id: 'id-del', title: 'Ó Luz do Senhor', artist: 'Padre Zezinho', content: 'D A');
+    await repo.save(m1);
+    expect(repo.songs.length, 1);
+
+    await repo.remove('id-del');
+    expect(repo.songs.length, 0);
+
+    // O usuário importa da comunidade a mesma música com novo ID
+    final mImportada = Song(
+      id: 'id-novo-uuid',
+      title: 'Ó Luz do Senhor',
+      artist: 'Padre Zezinho',
+      content: 'D A Bm G',
+      updatedAt: DateTime.now(),
+    );
+    await repo.save(mImportada);
+
+    // A música deve voltar ativa
+    expect(repo.songs.length, 1);
+    expect(repo.songs.first.title, 'Ó Luz do Senhor');
+    expect(repo.songs.first.deleted, isFalse);
+    expect(repo.songs.first.content, 'D A Bm G');
+  });
+
+  test('SyncService ressuscita música recentemente importada mesmo que remoteDeletedKeys a contenha', () {
+    final remoteSongs = <Song>[];
+    final remoteDeletedKeys = ['ó luz do senhor|padre zezinho'];
+
+    final localRecentSong = Song(
+      id: 's_recente',
+      title: 'Ó Luz do Senhor',
+      artist: 'Padre Zezinho',
+      content: 'D A Bm G',
+      updatedAt: DateTime.now(),
+    );
+
+    final (pull, push, idMap) = SyncService.deduplicateAndMergeSongsForTesting(
+      remoteSongs,
+      [localRecentSong],
+      const [],
+      remoteDeletedKeys,
+    );
+
+    // Como foi importada/criada nos últimos 15 min, deve disparar push para revogar na nuvem
+    expect(push, isTrue);
+  });
 }

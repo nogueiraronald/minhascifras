@@ -1216,7 +1216,7 @@ class _MainScreenState extends State<MainScreen> {
     if (Scaffold.maybeOf(context)?.isDrawerOpen == true) {
       Navigator.of(context).pop();
     }
-    await Navigator.push<void>(
+    final importedSongId = await Navigator.push<String?>(
       context,
       MaterialPageRoute(
         builder: (_) => TelaComunidade(
@@ -1232,7 +1232,17 @@ class _MainScreenState extends State<MainScreen> {
       ),
     );
     if (mounted) {
-      _ensureFirstSongSelected();
+      if (importedSongId != null && importedSongId.isNotEmpty) {
+        final importedSong = widget.repository.songs
+            .where((s) => s.id == importedSongId)
+            .firstOrNull;
+        if (importedSong != null) {
+          _tabIndex = 0;
+          _selectSong(importedSong);
+        }
+      } else {
+        _ensureFirstSongSelected();
+      }
       _loadMySharedSongs();
       setState(() {});
     }

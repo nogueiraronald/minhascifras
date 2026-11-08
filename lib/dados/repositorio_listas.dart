@@ -104,9 +104,11 @@ class SetlistRepository extends ChangeNotifier {
   }
 
   Future<void> saveSetlist(Setlist s) async {
-    final i = _lists.indexWhere((e) => e.id == s.id);
+    final key = s.name.trim().toLowerCase();
+    final i = _lists.indexWhere(
+        (e) => e.id == s.id || e.name.trim().toLowerCase() == key);
     if (i >= 0) {
-      _lists[i] = s;
+      _lists[i] = _lists[i].copyWith(name: s.name, notes: s.notes, deleted: false);
     } else {
       _lists.add(s);
     }
