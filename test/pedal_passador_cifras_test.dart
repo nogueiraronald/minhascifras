@@ -115,7 +115,8 @@ void main() {
     expect(find.text('Música 1 Alpha'), findsWidgets);
   });
 
-  testWidgets('Pedal M-Vave Modo 1 e 3 (PageDown/ArrowDown): avança música quando atinge o fim ou sem scroll',
+  testWidgets(
+      'Rolagem por PageDown/ArrowDown/PageUp/ArrowUp NÃO muda de música no fim da página',
       (tester) async {
     tester.view.physicalSize = const Size(1920, 1080);
     tester.view.devicePixelRatio = 1.0;
@@ -124,34 +125,30 @@ void main() {
     await tester.pumpWidget(buildApp());
     await tester.pumpAndSettle();
 
-    expect(find.text('Música 1 Alpha'), findsWidgets);
+    expect(find.text('Letra da musica 1 linha 1'), findsOneWidget);
 
-    // Música curta (sem scroll suficiente): pisar no PageDown avança diretamente de música
+    // Rolar para baixo com PageDown e ArrowDown NÃO deve saltar de música
     await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
     await tester.pumpAndSettle();
+    expect(find.text('Letra da musica 1 linha 1'), findsOneWidget);
+    expect(find.text('Letra da musica 2 linha 1'), findsNothing);
 
-    expect(find.text('Música 2 Beta'), findsWidgets);
-
-    // Pressionar seta para baixo (ArrowDown / Modo 3)
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
+    expect(find.text('Letra da musica 1 linha 1'), findsOneWidget);
+    expect(find.text('Letra da musica 2 linha 1'), findsNothing);
 
-    expect(find.text('Música 3 Gamma'), findsWidgets);
-
-    // Pressionar seta para cima (ArrowUp / Modo 3)
+    // Rolar para cima com ArrowUp e PageUp também NÃO muda de música
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pumpAndSettle();
+    expect(find.text('Letra da musica 1 linha 1'), findsOneWidget);
 
-    expect(find.text('Música 2 Beta'), findsWidgets);
-
-    // Pressionar PageUp (Modo 1)
     await tester.sendKeyEvent(LogicalKeyboardKey.pageUp);
     await tester.pumpAndSettle();
-
-    expect(find.text('Música 1 Alpha'), findsWidgets);
+    expect(find.text('Letra da musica 1 linha 1'), findsOneWidget);
   });
 
-  testWidgets('Pedal M-Vave Modo 4 (Espaço e Enter): avança e retrocede músicas',
+  testWidgets('Espaço e Enter executam rolagem e NÃO mudam de música',
       (tester) async {
     tester.view.physicalSize = const Size(1920, 1080);
     tester.view.devicePixelRatio = 1.0;
@@ -160,19 +157,19 @@ void main() {
     await tester.pumpWidget(buildApp());
     await tester.pumpAndSettle();
 
-    expect(find.text('Música 1 Alpha'), findsWidgets);
+    expect(find.text('Letra da musica 1 linha 1'), findsOneWidget);
 
-    // Pedal direito (Space no modo 4): avança
+    // Espaço rola para baixo sem mudar de música
     await tester.sendKeyEvent(LogicalKeyboardKey.space);
     await tester.pumpAndSettle();
+    expect(find.text('Letra da musica 1 linha 1'), findsOneWidget);
+    expect(find.text('Letra da musica 2 linha 1'), findsNothing);
 
-    expect(find.text('Música 2 Beta'), findsWidgets);
-
-    // Pedal esquerdo (Enter no modo 4): retrocede
+    // Enter rola para cima sem mudar de música
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
-
-    expect(find.text('Música 1 Alpha'), findsWidgets);
+    expect(find.text('Letra da musica 1 linha 1'), findsOneWidget);
+    expect(find.text('Letra da musica 2 linha 1'), findsNothing);
   });
 
   testWidgets('Digitação em campo de pesquisa NÃO dispara navegação de pedal',

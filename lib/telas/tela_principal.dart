@@ -1000,22 +1000,19 @@ class _MainScreenState extends State<MainScreen> {
     if (_currentSong == null) return;
 
     final now = DateTime.now();
-    if (now.difference(_globalLastScrollTime).inMilliseconds < 180) {
+    if (now.difference(_globalLastScrollTime).inMilliseconds < 200) {
       return;
     }
     _globalLastScrollTime = now;
 
     if (!_scrollController.hasClients ||
         _scrollController.positions.length != 1) {
-      _navigateSong(1);
       return;
     }
 
     final pos = _scrollController.position;
-    // Se já estiver no final da página (ou sem rolagem necessária), avança para a próxima música
-    if (pos.maxScrollExtent <= 15 || pos.pixels >= pos.maxScrollExtent - 35) {
-      _navigateSong(1);
-    } else {
+    // Rola para baixo até o fim do conteúdo. NUNCA muda de música automaticamente!
+    if (pos.pixels < pos.maxScrollExtent) {
       _pedalHudController.mostrar(TipoAcaoPedal.descer);
       _scrollBy(delta);
     }
@@ -1025,22 +1022,19 @@ class _MainScreenState extends State<MainScreen> {
     if (_currentSong == null) return;
 
     final now = DateTime.now();
-    if (now.difference(_globalLastScrollTime).inMilliseconds < 180) {
+    if (now.difference(_globalLastScrollTime).inMilliseconds < 200) {
       return;
     }
     _globalLastScrollTime = now;
 
     if (!_scrollController.hasClients ||
         _scrollController.positions.length != 1) {
-      _navigateSong(-1);
       return;
     }
 
     final pos = _scrollController.position;
-    // Se já estiver no topo da página (ou sem rolagem necessária), volta para a música anterior
-    if (pos.maxScrollExtent <= 15 || pos.pixels <= 20) {
-      _navigateSong(-1);
-    } else {
+    // Rola para cima até o início do conteúdo. NUNCA volta de música automaticamente!
+    if (pos.pixels > 0) {
       _pedalHudController.mostrar(TipoAcaoPedal.subir);
       _scrollBy(-delta);
     }
