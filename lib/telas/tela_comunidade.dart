@@ -2712,6 +2712,7 @@ class _TelaLeitorComunidadeOnlineState
   @override
   void initState() {
     super.initState();
+    HardwareKeyboard.instance.addHandler(_handleGlobalKeyEvent);
     _songList = List<CommunitySong>.from(widget.songs);
     _currentIndex = _songList.isEmpty
         ? 0
@@ -2720,6 +2721,7 @@ class _TelaLeitorComunidadeOnlineState
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleGlobalKeyEvent);
     _scrollTimer?.cancel();
     _scrollController.dispose();
     _readerFocusNode.dispose();
@@ -2911,37 +2913,119 @@ class _TelaLeitorComunidadeOnlineState
     );
   }
 
-  KeyEventResult _handleKeyEvent(KeyEvent event) {
+  bool _handleGlobalKeyEvent(KeyEvent event) {
+    if (!mounted) return false;
+
+    final focus = FocusManager.instance.primaryFocus;
+    if (focus?.context?.widget is EditableText) {
+      return false;
+    }
+
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return false;
+    }
+
     final key = event.logicalKey;
-    if (key == LogicalKeyboardKey.arrowRight) {
+
+    // Setas laterais: Próxima / Anterior
+    if (key == LogicalKeyboardKey.arrowRight ||
+        key == LogicalKeyboardKey.numpad6 ||
+        key == LogicalKeyboardKey.bracketRight) {
       if (event is KeyDownEvent) _navigateSong(1);
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.arrowLeft) {
+      return true;
+    }
+
+    if (key == LogicalKeyboardKey.arrowLeft ||
+        key == LogicalKeyboardKey.numpad4 ||
+        key == LogicalKeyboardKey.bracketLeft) {
       if (event is KeyDownEvent) _navigateSong(-1);
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.arrowDown) {
-      if (event is KeyDownEvent || event is KeyRepeatEvent) _scrollBy(180);
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.arrowUp) {
-      if (event is KeyDownEvent || event is KeyRepeatEvent) _scrollBy(-180);
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.pageDown) {
-      if (event is KeyDownEvent || event is KeyRepeatEvent) _scrollBy(350);
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.pageUp) {
-      if (event is KeyDownEvent || event is KeyRepeatEvent) _scrollBy(-350);
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.space) {
+      return true;
+    }
+
+    // Avançar / Rolar para Baixo (PageDown, Seta Baixo, Numpad 2/3, Tecla B)
+    final isDownAction = key == LogicalKeyboardKey.pageDown ||
+        key == LogicalKeyboardKey.arrowDown ||
+        key == LogicalKeyboardKey.numpad2 ||
+        key == LogicalKeyboardKey.numpad3 ||
+        key == LogicalKeyboardKey.keyB;
+
+    if (isDownAction) {
+      _handlePedalScrollDown(key == LogicalKeyboardKey.pageDown ? 350 : 250);
+      return true;
+    }
+
+    // Retroceder / Rolar para Cima (PageUp, Seta Cima, Numpad 8/9, Tecla W)
+    final isUpAction = key == LogicalKeyboardKey.pageUp ||
+        key == LogicalKeyboardKey.arrowUp ||
+        key == LogicalKeyboardKey.numpad8 ||
+        key == LogicalKeyboardKey.numpad9 ||
+        key == LogicalKeyboardKey.keyW;
+
+    if (isUpAction) {
+      _handlePedalScrollUp(key == LogicalKeyboardKey.pageUp ? 350 : 250);
+      return true;
+    }
+
+    // Modo 4 do pedal (Espaço = Avançar/Baixo, Enter = Retroceder/Cima ou Pausar rolagem)
+    if (key == LogicalKeyboardKey.space) {
       if (event is KeyDownEvent) {
         if (_isPlaying) {
           _stopScroll();
         } else {
-          _scrollBy(220);
+          _handlePedalScrollDown(280);
         }
       }
-      return KeyEventResult.handled;
+      return true;
     }
-    return KeyEventResult.ignored;
+
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter) {
+      if (event is KeyDownEvent) {
+        if (_isPlaying) {
+          _stopScroll();
+        } else {
+          _handlePedalScrollUp(280);
+        }
+      }
+      return true;
+    }
+
+    return false;
+  }
+
+  void _handlePedalScrollDown(double delta) {
+    if (!_scrollController.hasClients ||
+        _scrollController.positions.length != 1) {
+      _navigateSong(1);
+      return;
+    }
+
+    final pos = _scrollController.position;
+    if (pos.maxScrollExtent <= 15 || pos.pixels >= pos.maxScrollExtent - 35) {
+      _navigateSong(1);
+    } else {
+      _scrollBy(delta);
+    }
+  }
+
+  void _handlePedalScrollUp(double delta) {
+    if (!_scrollController.hasClients ||
+        _scrollController.positions.length != 1) {
+      _navigateSong(-1);
+      return;
+    }
+
+    final pos = _scrollController.position;
+    if (pos.maxScrollExtent <= 15 || pos.pixels <= 20) {
+      _navigateSong(-1);
+    } else {
+      _scrollBy(-delta);
+    }
+  }
+
+  KeyEventResult _handleKeyEvent(KeyEvent event) {
+    final handled = _handleGlobalKeyEvent(event);
+    return handled ? KeyEventResult.handled : KeyEventResult.ignored;
   }
 
   @override

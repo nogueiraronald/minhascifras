@@ -17,6 +17,13 @@ class ThemeRepository extends ChangeNotifier {
   /// Chamado após alterações do usuário (não pela sincronização).
   VoidCallback? onLocalChange;
 
+  /// Indica se há alterações de temas locais pendentes para envio ao banco em nuvem
+  bool hasPendingChanges = false;
+
+  void markSynced() {
+    hasPendingChanges = false;
+  }
+
   static const List<String> defaultThemes = [
     'Aclamação',
     'Adoração',
@@ -184,6 +191,7 @@ class ThemeRepository extends ChangeNotifier {
     await _prefs.setString(_key, jsonEncode(_themes));
     notifyListeners();
     if (!fromSync) {
+      hasPendingChanges = true;
       onLocalChange?.call();
     }
   }

@@ -143,22 +143,25 @@ class SyncService extends ChangeNotifier {
 
     var themePush = false;
     if (_musicThemes != null) {
-      // Adiciona novos temas da nuvem
-      for (final rTheme in remote.themes) {
-        final rLower = rTheme.trim().toLowerCase();
-        if (!_musicThemes.themes.any((t) => t.toLowerCase() == rLower)) {
-          await _musicThemes.addThemeFromSync(rTheme);
-        }
-      }
-
-      // Verifica se a lista de temas locais difere da nuvem
-      final localThemeSet =
-          _musicThemes.themes.map((t) => t.toLowerCase()).toSet();
-      final remoteThemeSet =
-          remote.themes.map((t) => t.toLowerCase()).toSet();
-      if (localThemeSet.length != remoteThemeSet.length ||
-          !localThemeSet.containsAll(remoteThemeSet)) {
+      if (_musicThemes.hasPendingChanges) {
+        // Alteração intencional do usuário (exclusão, adição, renomeação).
+        // A lista local é a fonte da verdade definitiva e deve persistir no banco.
         themePush = true;
+        _musicThemes.markSynced();
+      } else if (_musicThemes.themes.isEmpty && remote.themes.isNotEmpty) {
+        // Dispositivo novo ou primeiro login: importa os temas salvos na conta do usuário
+        await _musicThemes.setThemes(remote.themes, fromSync: true);
+      } else {
+        // Verifica se a lista de temas locais difere da nuvem
+        final localThemeSet =
+            _musicThemes.themes.map((t) => t.toLowerCase()).toSet();
+        final remoteThemeSet =
+            remote.themes.map((t) => t.toLowerCase()).toSet();
+        if (localThemeSet.length != remoteThemeSet.length ||
+            !localThemeSet.containsAll(remoteThemeSet) ||
+            !remoteThemeSet.containsAll(localThemeSet)) {
+          themePush = true;
+        }
       }
     }
 

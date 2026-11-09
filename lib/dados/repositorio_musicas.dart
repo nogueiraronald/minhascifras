@@ -182,11 +182,12 @@ class SongRepository extends ChangeNotifier {
   Future<void> removeTagFromAll(String tag) async {
     final trimmed = tag.toLowerCase().trim();
     bool changed = false;
+    final now = DateTime.now();
     for (int i = 0; i < _songs.length; i++) {
       if (_songs[i].tags.any((t) => t.toLowerCase().trim() == trimmed)) {
         final current = List<String>.from(_songs[i].tags);
         current.removeWhere((t) => t.toLowerCase().trim() == trimmed);
-        _songs[i] = _songs[i].copyWith(tags: current);
+        _songs[i] = _songs[i].copyWith(tags: current, updatedAt: now);
         changed = true;
       }
     }
@@ -200,10 +201,11 @@ class SongRepository extends ChangeNotifier {
     final oldTrimmed = oldTag.toLowerCase().trim();
     final newTrimmed = newTag.trim();
     bool changed = false;
+    final now = DateTime.now();
     for (int i = 0; i < _songs.length; i++) {
       if (_songs[i].tags.any((t) => t.toLowerCase().trim() == oldTrimmed)) {
         final current = _songs[i].tags.map((t) => t.toLowerCase().trim() == oldTrimmed ? newTrimmed : t).toList();
-        _songs[i] = _songs[i].copyWith(tags: current);
+        _songs[i] = _songs[i].copyWith(tags: current, updatedAt: now);
         changed = true;
       }
     }

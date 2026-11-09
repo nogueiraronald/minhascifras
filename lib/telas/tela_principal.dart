@@ -181,6 +181,7 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void initState() {
     super.initState();
+    HardwareKeyboard.instance.addHandler(_handleGlobalKeyEvent);
     ServicoWakeLock.manterTelaAtiva(true);
     _loadUserPreferences();
     widget.account.addListener(_checkAccountLock);
@@ -214,6 +215,7 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleGlobalKeyEvent);
     ServicoWakeLock.manterTelaAtiva(false);
     widget.account.removeListener(_checkAccountLock);
     widget.account.removeListener(_loadMySharedSongs);
@@ -826,53 +828,135 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  KeyEventResult _handleScreenKeyEvent(KeyEvent event) {
+  bool _handleGlobalKeyEvent(KeyEvent event) {
+    if (!mounted) return false;
+
+    // Se o usuário estiver digitando em um campo de texto, não intercepta
     if (_isTextEditingFocused()) {
-      return KeyEventResult.ignored;
+      return false;
+    }
+
+    // Apenas eventos de tecla pressionada (KeyDown) ou repetição (KeyRepeat)
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return false;
     }
 
     final key = event.logicalKey;
-    if (key == LogicalKeyboardKey.arrowRight) {
+
+    // --- MODO 2: SETAS LATERAIS (Avançar / Retroceder Música Diretamente) ---
+    // M-Vave Modo 2, teclados e controladores de palco
+    if (key == LogicalKeyboardKey.arrowRight ||
+        key == LogicalKeyboardKey.numpad6 ||
+        key == LogicalKeyboardKey.bracketRight) {
       if (event is KeyDownEvent) {
         _navigateSong(1);
       }
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.arrowLeft) {
+      return true;
+    }
+
+    if (key == LogicalKeyboardKey.arrowLeft ||
+        key == LogicalKeyboardKey.numpad4 ||
+        key == LogicalKeyboardKey.bracketLeft) {
       if (event is KeyDownEvent) {
         _navigateSong(-1);
       }
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.arrowDown) {
-      if (event is KeyDownEvent || event is KeyRepeatEvent) {
-        _scrollBy(180);
-      }
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.arrowUp) {
-      if (event is KeyDownEvent || event is KeyRepeatEvent) {
-        _scrollBy(-180);
-      }
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.pageDown) {
-      if (event is KeyDownEvent || event is KeyRepeatEvent) {
-        _scrollBy(350);
-      }
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.pageUp) {
-      if (event is KeyDownEvent || event is KeyRepeatEvent) {
-        _scrollBy(-350);
-      }
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.space) {
+      return true;
+    }
+
+    // --- MODO 1, 3, 5: AVANÇAR / ROLAR PARA BAIXO ---
+    // PageDown, Seta Baixo, Numpad 2, Numpad 3, tecla 'b' (Modo iOS M-Vave)
+    final isDownAction = key == LogicalKeyboardKey.pageDown ||
+        key == LogicalKeyboardKey.arrowDown ||
+        key == LogicalKeyboardKey.numpad2 ||
+        key == LogicalKeyboardKey.numpad3 ||
+        key == LogicalKeyboardKey.keyB;
+
+    if (isDownAction) {
+      _handlePedalScrollDown(key == LogicalKeyboardKey.pageDown ? 350 : 250);
+      return true;
+    }
+
+    // --- MODO 1, 3, 5: RETROCEDER / ROLAR PARA CIMA ---
+    // PageUp, Seta Cima, Numpad 8, Numpad 9, tecla 'w' (Modo iOS M-Vave)
+    final isUpAction = key == LogicalKeyboardKey.pageUp ||
+        key == LogicalKeyboardKey.arrowUp ||
+        key == LogicalKeyboardKey.numpad8 ||
+        key == LogicalKeyboardKey.numpad9 ||
+        key == LogicalKeyboardKey.keyW;
+
+    if (isUpAction) {
+      _handlePedalScrollUp(key == LogicalKeyboardKey.pageUp ? 350 : 250);
+      return true;
+    }
+
+    // --- MODO 4: ESPAÇO E ENTER (M-Vave Modo 4) ---
+    // Pedal 1 (Space): Rola para baixo / Avança música
+    // Pedal 2 (Enter / Return): Rola para cima / Retrocede música ou Pausa rolagem
+    if (key == LogicalKeyboardKey.space) {
       if (event is KeyDownEvent) {
         if (_isPlaying) {
           _stopScroll();
         } else {
-          _scrollBy(220);
+          _handlePedalScrollDown(280);
         }
       }
-      return KeyEventResult.handled;
+      return true;
     }
-    return KeyEventResult.ignored;
+
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter) {
+      if (event is KeyDownEvent) {
+        if (_isPlaying) {
+          _stopScroll();
+        } else {
+          _handlePedalScrollUp(280);
+        }
+      }
+      return true;
+    }
+
+    return false;
+  }
+
+  void _handlePedalScrollDown(double delta) {
+    if (_currentSong == null) return;
+
+    if (!_scrollController.hasClients ||
+        _scrollController.positions.length != 1) {
+      _navigateSong(1);
+      return;
+    }
+
+    final pos = _scrollController.position;
+    // Se já estiver no final da página (ou sem rolagem necessária), avança para a próxima música
+    if (pos.maxScrollExtent <= 15 || pos.pixels >= pos.maxScrollExtent - 35) {
+      _navigateSong(1);
+    } else {
+      _scrollBy(delta);
+    }
+  }
+
+  void _handlePedalScrollUp(double delta) {
+    if (_currentSong == null) return;
+
+    if (!_scrollController.hasClients ||
+        _scrollController.positions.length != 1) {
+      _navigateSong(-1);
+      return;
+    }
+
+    final pos = _scrollController.position;
+    // Se já estiver no topo da página (ou sem rolagem necessária), volta para a música anterior
+    if (pos.maxScrollExtent <= 15 || pos.pixels <= 20) {
+      _navigateSong(-1);
+    } else {
+      _scrollBy(-delta);
+    }
+  }
+
+  KeyEventResult _handleScreenKeyEvent(KeyEvent event) {
+    final handled = _handleGlobalKeyEvent(event);
+    return handled ? KeyEventResult.handled : KeyEventResult.ignored;
   }
 
   void _navigateSong(int delta) {
