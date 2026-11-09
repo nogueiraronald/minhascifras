@@ -16,3 +16,7 @@ void registrarPedalDebugBridge(PedalDebugCallback? callback) {
 String obterUltimoDebugBridge() {
   return '';
 }
+
+void reassumirFocoPedalBridge() {
+  // No-op em plataformas não-web
+}

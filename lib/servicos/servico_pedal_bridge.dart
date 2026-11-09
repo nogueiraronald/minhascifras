@@ -27,4 +27,9 @@ class ServicoPedalBridge {
   static String obterUltimoDebug() {
     return impl.obterUltimoDebugBridge();
   }
+
+  /// Pede ao navegador para reassumir o foco do receptor de teclas do pedal.
+  static void reassumirFoco() {
+    impl.reassumirFocoPedalBridge();
+  }
 }

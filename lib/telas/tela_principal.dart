@@ -40,6 +40,7 @@ import '../servicos/servico_atualizacao_pwa.dart';
 import '../servicos/servico_comunidade.dart';
 import '../servicos/servico_wakelock.dart';
 import '../componentes/indicador_pedal.dart';
+import '../componentes/dialogo_teste_pedal.dart';
 import '../servicos/servico_pedal_bridge.dart';
 import 'tela_comunidade.dart';
 
@@ -4050,6 +4051,18 @@ class _MainScreenState extends State<MainScreen> {
                     onPressed: () async {
                       await ServicoAtualizacaoPwa.verificarAtualizacao(context);
                     },
+                  ),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints:
+                        const BoxConstraints(minWidth: 32, minHeight: 32),
+                    tooltip: 'Testar pedal Bluetooth',
+                    icon: const Icon(
+                      Icons.keyboard_alt_outlined,
+                      size: 20,
+                    ),
+                    onPressed: () => DialogoTestePedal.show(context),
                   ),
                   AccountButton(
                     account: widget.account,

@@ -51,3 +51,7 @@ void registrarPedalDebugBridge(PedalDebugCallback? callback) {
 String obterUltimoDebugBridge() {
   return _ultimoDebug;
 }
+
+void reassumirFocoPedalBridge() {
+  html.window.dispatchEvent(html.CustomEvent('refocuspedal'));
+}
