@@ -224,5 +224,63 @@ void main() {
     expect(find.byIcon(Icons.arrow_back_rounded), findsOneWidget);
     await tester.pumpAndSettle();
   });
+
+  testWidgets('Toque nas bordas laterais da tela (TapZones) e botões chevron avançam e retrocedem músicas',
+      (tester) async {
+    tester.view.physicalSize = const Size(1920, 1080);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+
+    expect(find.text('Música 1 Alpha'), findsWidgets);
+
+    // Clica no chevron direito
+    final chevronDireito = find.byIcon(Icons.chevron_right_rounded);
+    expect(chevronDireito, findsOneWidget);
+    await tester.tap(chevronDireito);
+    await tester.pumpAndSettle();
+
+    // Deve ter ido para a Música 2 Beta
+    expect(find.text('Música 2 Beta'), findsWidgets);
+
+    // Clica no chevron esquerdo
+    final chevronEsquerdo = find.byIcon(Icons.chevron_left_rounded);
+    expect(chevronEsquerdo, findsOneWidget);
+    await tester.tap(chevronEsquerdo);
+    await tester.pumpAndSettle();
+
+    // Deve ter voltado para a Música 1 Alpha
+    expect(find.text('Música 1 Alpha'), findsWidgets);
+  });
+
+  testWidgets('DialogoDiagnosticoPedal abre e exibe guia do M-VAVE e botões de teste',
+      (tester) async {
+    tester.view.physicalSize = const Size(1920, 1080);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+
+    // Clica no ícone de pedal no topo
+    final btnPedal = find.byTooltip('Pedal passador de cifras (M-VAVE)');
+    expect(btnPedal, findsOneWidget);
+    await tester.tap(btnPedal);
+    await tester.pumpAndSettle();
+
+    // Diálogo deve estar aberto
+    expect(find.text('Pedal Passador de Cifras'), findsOneWidget);
+    expect(find.text('Guia Rápido: M-VAVE VAVE368'), findsOneWidget);
+    expect(find.text('Testar ⇨'), findsOneWidget);
+    expect(find.text('Testar ⇦'), findsOneWidget);
+
+    // Clica em 'Entendido' para fechar
+    await tester.tap(find.text('Entendido'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Guia Rápido: M-VAVE VAVE368'), findsNothing);
+  });
 }
 

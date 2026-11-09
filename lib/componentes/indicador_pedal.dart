@@ -107,3 +107,4 @@ class IndicadorPedalOverlay extends StatelessWidget {
     );
   }
 }
+

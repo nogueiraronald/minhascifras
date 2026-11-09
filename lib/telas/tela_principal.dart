@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -40,6 +41,7 @@ import '../servicos/servico_atualizacao_pwa.dart';
 import '../servicos/servico_comunidade.dart';
 import '../servicos/servico_wakelock.dart';
 import '../componentes/indicador_pedal.dart';
+import '../componentes/dialogo_diagnostico_pedal.dart';
 import '../servicos/servico_pedal_bridge.dart';
 import 'tela_comunidade.dart';
 
@@ -832,6 +834,13 @@ class _MainScreenState extends State<MainScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  void _showPedalDialog() {
+    DialogoDiagnosticoPedal.show(
+      context,
+      onTriggerAction: (action) => _handleBridgePedalAction(action),
     );
   }
 
@@ -2391,6 +2400,12 @@ class _MainScreenState extends State<MainScreen> {
                       onPressed: () => setState(
                           () => _showKaraokePlayer = !_showKaraokePlayer),
                     ),
+                  // Pedal passador de cifras Bluetooth (M-VAVE e outros)
+                  IconButton(
+                    tooltip: 'Pedal passador de cifras (M-VAVE)',
+                    icon: const Icon(Icons.settings_input_component, size: 20),
+                    onPressed: _showPedalDialog,
+                  ),
                   // Editar música
                   IconButton(
                     tooltip: 'Editar cifra',
@@ -2410,61 +2425,150 @@ class _MainScreenState extends State<MainScreen> {
           child: Stack(
             children: [
               Positioned.fill(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onTap: () {
-                    FocusManager.instance.primaryFocus?.unfocus();
-                    _mainFocusNode.requestFocus();
-                  },
-                  onHorizontalDragStart: (_) {
-                    _horizontalDragDistance = 0;
-                  },
-                  onHorizontalDragUpdate: (details) {
-                    _horizontalDragDistance += details.primaryDelta ?? 0;
-                  },
-                  onHorizontalDragEnd: (details) {
-                    final velocity = details.primaryVelocity ?? 0;
-                    // Arrastou para a esquerda -> Próxima música
-                    if (_horizontalDragDistance < -50 || velocity < -250) {
+                child: Listener(
+                  onPointerDown: (event) {
+                    // Trata cliques com botão secundário (Direito), meio ou voltar/avançar
+                    // comumente emitidos por pedais Bluetooth no Modo Mouse (M-VAVE Modo 4)
+                    if (event.buttons == kSecondaryMouseButton ||
+                        event.buttons == kForwardMouseButton) {
                       _navigateSong(1);
-                    }
-                    // Arrastou para a direita -> Música anterior
-                    else if (_horizontalDragDistance > 50 || velocity > 250) {
+                    } else if (event.buttons == kMiddleMouseButton ||
+                        event.buttons == kBackMouseButton) {
                       _navigateSong(-1);
                     }
-                    _horizontalDragDistance = 0;
                   },
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 250),
-                    layoutBuilder: (currentChild, previousChildren) {
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
                       return Stack(
-                        fit: StackFit.expand,
                         children: [
-                          ...previousChildren,
-                          if (currentChild != null) currentChild,
+                          Positioned.fill(
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.translucent,
+                              onTapUp: (details) {
+                                final x = details.localPosition.dx;
+                                final w = constraints.maxWidth;
+                                // Toque ou clique nas bordas laterais extremas (50px) para avançar/voltar
+                                if (x < 50) {
+                                  _navigateSong(-1);
+                                  return;
+                                } else if (x > w - 50) {
+                                  _navigateSong(1);
+                                  return;
+                                }
+                                FocusManager.instance.primaryFocus?.unfocus();
+                                _mainFocusNode.requestFocus();
+                              },
+                              onHorizontalDragStart: (_) {
+                                _horizontalDragDistance = 0;
+                              },
+                              onHorizontalDragUpdate: (details) {
+                                _horizontalDragDistance += details.primaryDelta ?? 0;
+                              },
+                              onHorizontalDragEnd: (details) {
+                                final velocity = details.primaryVelocity ?? 0;
+                                // Arrastou para a esquerda -> Próxima música
+                                if (_horizontalDragDistance < -50 || velocity < -250) {
+                                  _navigateSong(1);
+                                }
+                                // Arrastou para a direita -> Música anterior
+                                else if (_horizontalDragDistance > 50 || velocity > 250) {
+                                  _navigateSong(-1);
+                                }
+                                _horizontalDragDistance = 0;
+                              },
+                              child: AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 250),
+                                layoutBuilder: (currentChild, previousChildren) {
+                                  return Stack(
+                                    fit: StackFit.expand,
+                                    children: [
+                                      ...previousChildren,
+                                      if (currentChild != null) currentChild,
+                                    ],
+                                  );
+                                },
+                                transitionBuilder: (child, animation) {
+                                  final offset = Tween<Offset>(
+                                    begin: Offset(_navDirection >= 0 ? 0.08 : -0.08, 0),
+                                    end: Offset.zero,
+                                  ).animate(CurvedAnimation(
+                                    parent: animation,
+                                    curve: Curves.easeOutCubic,
+                                  ));
+                                  return FadeTransition(
+                                    opacity: animation,
+                                    child: SlideTransition(
+                                      position: offset,
+                                      child: child,
+                                    ),
+                                  );
+                                },
+                                child: KeyedSubtree(
+                                  key: ValueKey('${_currentSong!.id}_${_displayMode.name}'),
+                                  child: _buildSongView(),
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          // Seta sutil esquerda para retorno de música
+                          Positioned(
+                            left: 2,
+                            top: 0,
+                            bottom: 0,
+                            child: Center(
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(16),
+                                  onTap: () => _navigateSong(-1),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 20),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withValues(alpha: 0.04),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Icon(
+                                      Icons.chevron_left_rounded,
+                                      size: 24,
+                                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.22),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          // Seta sutil direita para avanço de música
+                          Positioned(
+                            right: 2,
+                            top: 0,
+                            bottom: 0,
+                            child: Center(
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(16),
+                                  onTap: () => _navigateSong(1),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 20),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withValues(alpha: 0.04),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Icon(
+                                      Icons.chevron_right_rounded,
+                                      size: 24,
+                                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.22),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
                         ],
                       );
                     },
-                    transitionBuilder: (child, animation) {
-                      final offset = Tween<Offset>(
-                        begin: Offset(_navDirection >= 0 ? 0.08 : -0.08, 0),
-                        end: Offset.zero,
-                      ).animate(CurvedAnimation(
-                        parent: animation,
-                        curve: Curves.easeOutCubic,
-                      ));
-                      return FadeTransition(
-                        opacity: animation,
-                        child: SlideTransition(
-                          position: offset,
-                          child: child,
-                        ),
-                      );
-                    },
-                    child: KeyedSubtree(
-                      key: ValueKey('${_currentSong!.id}_${_displayMode.name}'),
-                      child: _buildSongView(),
-                    ),
                   ),
                 ),
               ),
@@ -4472,11 +4576,26 @@ class _MainScreenState extends State<MainScreen> {
                             ),
                           );
                         }
+                      } else if (action == 'pedal_config') {
+                        _showPedalDialog();
                       } else if (action == 'delete_all') {
                         _deleteAllSongs();
                       }
                     },
                     itemBuilder: (_) => const [
+                      PopupMenuItem(
+                        value: 'pedal_config',
+                        child: Row(
+                          children: [
+                            Icon(Icons.settings_input_component,
+                                size: 18, color: AppCores.roxo),
+                            SizedBox(width: 10),
+                            Expanded(
+                              child: Text('Pedal Passador de Cifras (M-VAVE)'),
+                            ),
+                          ],
+                        ),
+                      ),
                       PopupMenuItem(
                         value: 'sanitize_titles',
                         child: Row(
@@ -5379,6 +5498,8 @@ class _MainScreenState extends State<MainScreen> {
                                 if (context.mounted) {
                                   await ServicoAtualizacaoPwa.verificarAtualizacao(context);
                                 }
+                              } else if (val == 'pedal_config') {
+                                _showPedalDialog();
                               } else if (val == 'account') {
                                 DesktopLoginDialog.show(
                                   context,
@@ -5469,6 +5590,23 @@ class _MainScreenState extends State<MainScreen> {
                                     ],
                                   ),
                                 ),
+                              const PopupMenuItem(
+                                value: 'pedal_config',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.settings_input_component,
+                                        size: 18, color: AppCores.roxo),
+                                    SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        'Pedal Passador de Cifras (M-VAVE)',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                               const PopupMenuItem(
                                 value: 'sync',
                                 child: Row(
