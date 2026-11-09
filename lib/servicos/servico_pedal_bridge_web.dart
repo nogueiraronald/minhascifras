@@ -35,6 +35,12 @@ void _onFlutterFocusChanged() {
   }
 }
 
+void _dispatchToActiveListener(String action) {
+  if (action.isEmpty || _actionListeners.isEmpty) return;
+  // Envia para o listener no topo da pilha (leitor ativo no momento)
+  _actionListeners.last(action);
+}
+
 void _ensureActionSubscription() {
   if (!_focusListenerRegistered) {
     _focusListenerRegistered = true;
@@ -42,13 +48,16 @@ void _ensureActionSubscription() {
   }
   if (_actionSub != null) return;
   _actionSub = html.window.on['pedalaction'].listen((event) {
+    String action = '';
     if (event is html.CustomEvent && event.detail != null) {
-      final action = event.detail.toString();
-      if (_actionListeners.isNotEmpty) {
-        // Envia para o listener no topo da pilha (leitor ativo no momento)
-        _actionListeners.last(action);
-      }
+      action = event.detail.toString();
     }
+    if (action.isEmpty) {
+      try {
+        action = (js.context['__mcLastAction'] ?? '').toString();
+      } catch (_) {}
+    }
+    _dispatchToActiveListener(action);
   });
 }
 

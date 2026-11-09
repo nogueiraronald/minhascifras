@@ -2749,8 +2749,17 @@ class _TelaLeitorComunidadeOnlineState
     super.dispose();
   }
 
+  static DateTime _lastNavTime = DateTime.fromMillisecondsSinceEpoch(0);
+  static DateTime _lastScrollTime = DateTime.fromMillisecondsSinceEpoch(0);
+
   void _navigateSong(int delta) {
     if (_songList.isEmpty) return;
+    final now = DateTime.now();
+    if (now.difference(_lastNavTime).inMilliseconds < 500) {
+      return;
+    }
+    _lastNavTime = now;
+
     final next = _currentIndex + delta;
     if (next >= 0 && next < _songList.length) {
       _pedalHudController.mostrar(
@@ -3053,6 +3062,12 @@ class _TelaLeitorComunidadeOnlineState
   }
 
   void _handlePedalScrollDown(double delta) {
+    final now = DateTime.now();
+    if (now.difference(_lastScrollTime).inMilliseconds < 200) {
+      return;
+    }
+    _lastScrollTime = now;
+
     if (!_scrollController.hasClients ||
         _scrollController.positions.length != 1) {
       return;
@@ -3066,6 +3081,12 @@ class _TelaLeitorComunidadeOnlineState
   }
 
   void _handlePedalScrollUp(double delta) {
+    final now = DateTime.now();
+    if (now.difference(_lastScrollTime).inMilliseconds < 200) {
+      return;
+    }
+    _lastScrollTime = now;
+
     if (!_scrollController.hasClients ||
         _scrollController.positions.length != 1) {
       return;
@@ -3079,8 +3100,23 @@ class _TelaLeitorComunidadeOnlineState
   }
 
   KeyEventResult _handleKeyEvent(KeyEvent event) {
-    final handled = _handleGlobalKeyEvent(event);
-    return handled ? KeyEventResult.handled : KeyEventResult.ignored;
+    final focus = FocusManager.instance.primaryFocus;
+    if (focus?.context?.widget is EditableText) {
+      return KeyEventResult.ignored;
+    }
+    if (_handleGlobalKeyEvent(event)) {
+      return KeyEventResult.handled;
+    }
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowRight ||
+        key == LogicalKeyboardKey.arrowLeft ||
+        key == LogicalKeyboardKey.arrowDown ||
+        key == LogicalKeyboardKey.arrowUp ||
+        key == LogicalKeyboardKey.pageDown ||
+        key == LogicalKeyboardKey.pageUp) {
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   @override
