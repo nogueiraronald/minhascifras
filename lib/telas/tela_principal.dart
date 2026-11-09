@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:clock/clock.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -360,7 +361,24 @@ class _MainScreenState extends State<MainScreen> {
           _scrollController.positions.length == 1) {
         _scrollController.jumpTo(0);
       }
+      _scrollToSelectedSongInSidebar(song.id);
     });
+  }
+
+  void _scrollToSelectedSongInSidebar(String songId) {
+    if (!_sidebarSongListController.hasClients) return;
+    final visible = _getVisibleSongs();
+    final idx = visible.indexWhere((s) => s.id == songId);
+    if (idx < 0) return;
+    final targetOffset = (idx * 48.0).clamp(
+      0.0,
+      _sidebarSongListController.position.maxScrollExtent,
+    );
+    _sidebarSongListController.animateTo(
+      targetOffset,
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   Future<void> _editCurrentSong() async {
@@ -605,7 +623,9 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   bool _isTextEditingFocused() {
-    if (_searchFocusNode.hasFocus || _themeSearchFocusNode.hasFocus) {
+    if (_searchFocusNode.hasFocus ||
+        _themeSearchFocusNode.hasFocus ||
+        _setlistSearchFocusNode.hasFocus) {
       return true;
     }
     final focus = FocusManager.instance.primaryFocus;
@@ -920,7 +940,9 @@ class _MainScreenState extends State<MainScreen> {
         key == LogicalKeyboardKey.keyB;
 
     if (isDownAction) {
-      _handlePedalScrollDown(key == LogicalKeyboardKey.pageDown ? 350 : 250);
+      if (event is KeyDownEvent) {
+        _handlePedalScrollDown(key == LogicalKeyboardKey.pageDown ? 350 : 250);
+      }
       return true;
     }
 
@@ -933,7 +955,9 @@ class _MainScreenState extends State<MainScreen> {
         key == LogicalKeyboardKey.keyW;
 
     if (isUpAction) {
-      _handlePedalScrollUp(key == LogicalKeyboardKey.pageUp ? 350 : 250);
+      if (event is KeyDownEvent) {
+        _handlePedalScrollUp(key == LogicalKeyboardKey.pageUp ? 350 : 250);
+      }
       return true;
     }
 
@@ -966,8 +990,17 @@ class _MainScreenState extends State<MainScreen> {
     return false;
   }
 
+  DateTime _lastScrollActionTime = DateTime.fromMillisecondsSinceEpoch(0);
+  DateTime _lastNavTime = DateTime.fromMillisecondsSinceEpoch(0);
+
   void _handlePedalScrollDown(double delta) {
     if (_currentSong == null) return;
+
+    final now = clock.now();
+    if (now.difference(_lastScrollActionTime).inMilliseconds < 120) {
+      return;
+    }
+    _lastScrollActionTime = now;
 
     if (!_scrollController.hasClients ||
         _scrollController.positions.length != 1) {
@@ -988,6 +1021,12 @@ class _MainScreenState extends State<MainScreen> {
   void _handlePedalScrollUp(double delta) {
     if (_currentSong == null) return;
 
+    final now = clock.now();
+    if (now.difference(_lastScrollActionTime).inMilliseconds < 120) {
+      return;
+    }
+    _lastScrollActionTime = now;
+
     if (!_scrollController.hasClients ||
         _scrollController.positions.length != 1) {
       _navigateSong(-1);
@@ -1004,12 +1043,13 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
-  KeyEventResult _handleScreenKeyEvent(KeyEvent event) {
-    final handled = _handleGlobalKeyEvent(event);
-    return handled ? KeyEventResult.handled : KeyEventResult.ignored;
-  }
-
   void _navigateSong(int delta) {
+    final now = clock.now();
+    if (now.difference(_lastNavTime).inMilliseconds < 250) {
+      return; // Bloqueia saltos múltiplos e switch bounce
+    }
+    _lastNavTime = now;
+
     final songs = _getVisibleSongs();
     if (songs.isEmpty || _currentSong == null) return;
     final currentIndex = songs.indexWhere((s) => s.id == _currentSong!.id);
@@ -5351,7 +5391,6 @@ class _MainScreenState extends State<MainScreen> {
             return Focus(
               focusNode: _mainFocusNode,
               autofocus: true,
-              onKeyEvent: (node, event) => _handleScreenKeyEvent(event),
               child: Scaffold(
                 key: const ValueKey('app_main_scaffold'),
                 appBar: isMobile

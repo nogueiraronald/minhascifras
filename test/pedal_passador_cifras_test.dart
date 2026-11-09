@@ -84,6 +84,7 @@ void main() {
     // Envia seta para a direita (Pedal direito / avançar)
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 260));
 
     // Deve ter avançado para Música 2 Beta
     expect(find.text('Música 2 Beta'), findsWidgets);
@@ -91,6 +92,7 @@ void main() {
     // Envia numpad6 (modo teclado numérico)
     await tester.sendKeyEvent(LogicalKeyboardKey.numpad6);
     await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 260));
 
     // Deve ter avançado para Música 3 Gamma
     expect(find.text('Música 3 Gamma'), findsWidgets);
@@ -98,6 +100,7 @@ void main() {
     // Envia seta para a esquerda (Pedal esquerdo / retroceder)
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 260));
 
     // Deve ter voltado para Música 2 Beta
     expect(find.text('Música 2 Beta'), findsWidgets);
@@ -105,6 +108,7 @@ void main() {
     // Envia numpad4 (modo teclado numérico)
     await tester.sendKeyEvent(LogicalKeyboardKey.numpad4);
     await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 260));
 
     // Deve ter voltado para Música 1 Alpha
     expect(find.text('Música 1 Alpha'), findsWidgets);
@@ -213,8 +217,9 @@ void main() {
     // O ícone de seta para a direita deve estar presente no HUD
     expect(find.byIcon(Icons.arrow_forward_rounded), findsOneWidget);
 
-    // Espera o HUD desaparecer após 650ms
+    // Espera o HUD desaparecer após 650ms e aguarda o debounce
     await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 260));
 
     // Envia comando de retroceder
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
@@ -234,7 +239,7 @@ void main() {
     await tester.pumpWidget(buildApp());
     await tester.pumpAndSettle();
 
-    expect(find.text('Música 1 Alpha'), findsWidgets);
+    expect(find.text('Letra da musica 1 linha 1'), findsOneWidget);
 
     // Clica no chevron direito
     final chevronDireito = find.byIcon(Icons.chevron_right_rounded);
@@ -243,7 +248,10 @@ void main() {
     await tester.pumpAndSettle();
 
     // Deve ter ido para a Música 2 Beta
-    expect(find.text('Música 2 Beta'), findsWidgets);
+    expect(find.text('Letra da musica 2 linha 1'), findsOneWidget);
+
+    // Aguarda debounce
+    await tester.pump(const Duration(milliseconds: 260));
 
     // Clica no chevron esquerdo
     final chevronEsquerdo = find.byIcon(Icons.chevron_left_rounded);
@@ -252,7 +260,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Deve ter voltado para a Música 1 Alpha
-    expect(find.text('Música 1 Alpha'), findsWidgets);
+    expect(find.text('Letra da musica 1 linha 1'), findsOneWidget);
   });
 
   testWidgets('DialogoDiagnosticoPedal abre e exibe guia do M-VAVE e botões de teste',
@@ -281,6 +289,29 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Guia Rápido: M-VAVE VAVE368'), findsNothing);
+  });
+
+  testWidgets('Proteção contra saltos múltiplos: disparos rápidos seguidos avançam apenas 1 música por vez',
+      (tester) async {
+    tester.view.physicalSize = const Size(1920, 1080);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+
+    // Começa na primeira música (Música 1 Alpha)
+    expect(find.text('Letra da musica 1 linha 1'), findsOneWidget);
+
+    // Dispara 3 vezes rapidamente em sucessão imediata (simulando bounce de pedal ou múltiplos listeners)
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+
+    // Deve avançar rigorosamente apenas 1 música (Música 2 Beta), e NÃO pular para a 3
+    expect(find.text('Letra da musica 2 linha 1'), findsOneWidget);
+    expect(find.text('Letra da musica 3 linha 1'), findsNothing);
   });
 }
 
