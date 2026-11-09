@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import '../servicos/servico_pedal_bridge.dart';
 
 /// Diálogo de diagnóstico do pedal Bluetooth.
-/// Mostra, em tempo real, cada tecla que o navegador entrega ao app e a ação reconhecida.
-/// Enquanto aberto, o pedal NÃO navega pelas cifras (apenas testa).
+/// Mostra, em tempo real, cada tecla ou movimento de cursor que o navegador entrega ao app
+/// e a ação reconhecida. Enquanto aberto, o pedal NÃO navega pelas cifras (apenas testa).
 class DialogoTestePedal extends StatefulWidget {
   const DialogoTestePedal({super.key});
 
@@ -25,6 +25,7 @@ class _DialogoTestePedalState extends State<DialogoTestePedal> {
   final List<String> _eventos = [];
   String _ultimaAcao = '–';
   int _acoes = 0;
+  bool _canalAtivo = true;
 
   @override
   void initState() {
@@ -40,6 +41,7 @@ class _DialogoTestePedalState extends State<DialogoTestePedal> {
   void dispose() {
     ServicoPedalBridge.registrarDebug(null);
     ServicoPedalBridge.desregistrar(_onAcao);
+    ServicoPedalBridge.reassumirFoco();
     super.dispose();
   }
 
@@ -65,6 +67,18 @@ class _DialogoTestePedalState extends State<DialogoTestePedal> {
     });
   }
 
+  void _simularAcao(String acao, String origem) {
+    ServicoPedalBridge.reassumirFoco();
+    final hora = TimeOfDay.now().format(context);
+    setState(() {
+      _canalAtivo = true;
+      _acoes++;
+      _ultimaAcao = _traduzir(acao);
+      _eventos.insert(0, '$hora  $origem  →  $acao');
+      if (_eventos.length > 8) _eventos.removeLast();
+    });
+  }
+
   String _traduzir(String acao) {
     switch (acao) {
       case 'next':
@@ -86,9 +100,27 @@ class _DialogoTestePedalState extends State<DialogoTestePedal> {
 
   @override
   Widget build(BuildContext context) {
-    final recebeu = _eventos.isNotEmpty;
+    final recebeu = _eventos.isNotEmpty || _acoes > 0;
     return AlertDialog(
-      title: const Text('Testar pedal'),
+      title: Row(
+        children: [
+          const Icon(Icons.keyboard_alt_outlined, size: 22),
+          const SizedBox(width: 8),
+          const Expanded(child: Text('Testar pedal')),
+          if (recebeu)
+            TextButton(
+              onPressed: () {
+                ServicoPedalBridge.reassumirFoco();
+                setState(() {
+                  _eventos.clear();
+                  _acoes = 0;
+                  _ultimaAcao = '–';
+                });
+              },
+              child: const Text('Limpar'),
+            ),
+        ],
+      ),
       content: SizedBox(
         width: 460,
         child: SingleChildScrollView(
@@ -97,14 +129,39 @@ class _DialogoTestePedalState extends State<DialogoTestePedal> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Toque na tela uma vez e depois pise no pedal. '
-                'Cada pisada deve aparecer abaixo.',
+                'Pise no pedal agora ou toque nos botões abaixo para testar '
+                'e ativar o canal Bluetooth do iPad.',
                 style: TextStyle(fontSize: 13),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () {
+                    ServicoPedalBridge.reassumirFoco();
+                    final hora = TimeOfDay.now().format(context);
+                    setState(() {
+                      _canalAtivo = true;
+                      _eventos.insert(
+                        0,
+                        '$hora  canal_ativado  cursor="Te|ste"  →  pronto',
+                      );
+                      if (_eventos.length > 8) _eventos.removeLast();
+                    });
+                  },
+                  icon: Icon(
+                    _canalAtivo
+                        ? Icons.bluetooth_connected_rounded
+                        : Icons.bluetooth_searching_rounded,
+                    size: 18,
+                  ),
+                  label: const Text('Ativar / Focar Canal do Pedal'),
+                ),
+              ),
+              const SizedBox(height: 12),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 18),
+                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
                 decoration: BoxDecoration(
                   color: (recebeu ? Colors.green : Colors.orange)
                       .withValues(alpha: 0.15),
@@ -114,46 +171,83 @@ class _DialogoTestePedalState extends State<DialogoTestePedal> {
                   children: [
                     Text(
                       _ultimaAcao,
+                      textAlign: TextAlign.center,
                       style: const TextStyle(
-                          fontSize: 22, fontWeight: FontWeight.w800),
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       recebeu
                           ? 'Ações reconhecidas: $_acoes'
-                          : 'Nenhuma tecla recebida ainda…',
+                          : 'Aguardando pisada no pedal…',
                       style: const TextStyle(fontSize: 12),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 12),
-              const Text('Últimas teclas recebidas pelo navegador:',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.center,
+                children: [
+                  OutlinedButton(
+                    onPressed: () => _simularAcao('prev', 'teste_toque'),
+                    child: const Text('◀ Voltar'),
+                  ),
+                  OutlinedButton(
+                    onPressed: () => _simularAcao('next', 'teste_toque'),
+                    child: const Text('Próxima ▶'),
+                  ),
+                  OutlinedButton(
+                    onPressed: () => _simularAcao('up', 'teste_toque'),
+                    child: const Text('▲ Subir'),
+                  ),
+                  OutlinedButton(
+                    onPressed: () => _simularAcao('down', 'teste_toque'),
+                    child: const Text('▼ Descer'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Últimas teclas / movimentos recebidos:',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+              ),
               const SizedBox(height: 6),
               if (_eventos.isEmpty)
                 const Text(
-                  'Se nada aparecer ao pisar, o iPad/navegador não está '
-                  'entregando as teclas do pedal ao app. Verifique o modo do '
-                  'pedal (setas ← → ou PageUp/PageDown) e se ele está conectado.',
+                  'Toque em "Ativar / Focar Canal do Pedal" acima e pise no pedal. '
+                  'Suporta modo Avançar/Voltar (← →) e Subir/Descer (↑ ↓ / PageUp / PageDown).',
                   style: TextStyle(fontSize: 12, color: Colors.grey),
                 )
               else
                 for (final e in _eventos)
-                  Text(e,
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 2),
+                    child: Text(
+                      e,
                       style: const TextStyle(
-                          fontSize: 11, fontFamily: 'monospace')),
+                        fontSize: 11,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ),
             ],
           ),
         ),
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: () {
+            ServicoPedalBridge.reassumirFoco();
+            Navigator.pop(context);
+          },
           child: const Text('Fechar'),
         ),
       ],
     );
   }
 }
-

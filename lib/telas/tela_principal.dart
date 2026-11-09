@@ -91,20 +91,27 @@ class _MainScreenState extends State<MainScreen> {
 
   // Busca de Músicas
   final _searchController = TextEditingController();
-  final FocusNode _searchFocusNode = FocusNode(debugLabel: 'SearchFieldFocus');
+  final FocusNode _searchFocusNode = FocusNode(
+    debugLabel: 'SearchFieldFocus',
+    skipTraversal: true,
+  );
   String _searchQuery = '';
 
   // Busca de Temas
   final _themeSearchController = TextEditingController();
-  final FocusNode _themeSearchFocusNode =
-      FocusNode(debugLabel: 'ThemeSearchFieldFocus');
+  final FocusNode _themeSearchFocusNode = FocusNode(
+    debugLabel: 'ThemeSearchFieldFocus',
+    skipTraversal: true,
+  );
   String _themeSearchQuery = '';
   final ScrollController _themesListController = ScrollController();
 
   // Busca de Listas
   final _setlistSearchController = TextEditingController();
-  final FocusNode _setlistSearchFocusNode =
-      FocusNode(debugLabel: 'SetlistSearchFieldFocus');
+  final FocusNode _setlistSearchFocusNode = FocusNode(
+    debugLabel: 'SetlistSearchFieldFocus',
+    skipTraversal: true,
+  );
   String _setlistSearchQuery = '';
   final ScrollController _setlistsListController = ScrollController();
 
@@ -356,6 +363,12 @@ class _MainScreenState extends State<MainScreen> {
 
     ServicoWakeLock.manterTelaAtiva(true);
     _initKaraokeController(song);
+
+    // Garante que nenhuma caixa de busca retenha o foco ao selecionar cifra
+    _searchFocusNode.unfocus();
+    _themeSearchFocusNode.unfocus();
+    _setlistSearchFocusNode.unfocus();
+    ServicoPedalBridge.reassumirFoco();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients &&
@@ -984,6 +997,25 @@ class _MainScreenState extends State<MainScreen> {
     }
 
     return false;
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (_isTextEditingFocused()) {
+      return KeyEventResult.ignored;
+    }
+    if (_handleGlobalKeyEvent(event)) {
+      return KeyEventResult.handled;
+    }
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowRight ||
+        key == LogicalKeyboardKey.arrowLeft ||
+        key == LogicalKeyboardKey.arrowDown ||
+        key == LogicalKeyboardKey.arrowUp ||
+        key == LogicalKeyboardKey.pageDown ||
+        key == LogicalKeyboardKey.pageUp) {
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   static DateTime _globalLastScrollTime = DateTime.fromMillisecondsSinceEpoch(0);
@@ -2158,11 +2190,9 @@ class _MainScreenState extends State<MainScreen> {
     );
     if (confirm == true) {
       await widget.musicThemes.clearAll(widget.repository);
-      if (_selectedTheme != null) {
+      if (mounted) {
         setState(() => _selectedTheme = null);
         _ensureFirstSongSelected();
-      }
-      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Todos os temas foram excluídos com sucesso.'),
@@ -5356,6 +5386,7 @@ class _MainScreenState extends State<MainScreen> {
             return Focus(
               focusNode: _mainFocusNode,
               autofocus: true,
+              onKeyEvent: _handleKeyEvent,
               child: Scaffold(
                 key: const ValueKey('app_main_scaffold'),
                 appBar: isMobile
