@@ -1,4 +1,3 @@
-import 'package:cifras_app/componentes/dialogo_teste_pedal.dart';
 import 'package:cifras_app/dados/biblioteca_acordes.dart';
 import 'package:cifras_app/dados/controlador_conta.dart';
 import 'package:cifras_app/dados/repositorio_listas.dart';
@@ -22,7 +21,7 @@ void main() {
   });
 
   testWidgets(
-      'Botão "Testar pedal Bluetooth" abre o diálogo, responde aos botões e o pedal navega continuamente sem focar a busca',
+      'Ícone de teste do pedal foi removido e o pedal navega continuamente sem focar a busca',
       (tester) async {
     final repo = await SongRepository.open();
     final setlists = await SetlistRepository.open();
@@ -63,23 +62,9 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    // 1. Verifica que o diálogo de teste do pedal abre e responde aos toques
-    final botao = find.byTooltip('Testar pedal Bluetooth');
-    expect(botao, findsOneWidget);
-    await tester.tap(botao);
-    await tester.pumpAndSettle();
-
-    expect(find.byType(DialogoTestePedal), findsOneWidget);
-    expect(find.text('Aguardando pisada no pedal…'), findsOneWidget);
-
-    await tester.tap(find.text('Próxima ▶'));
-    await tester.pumpAndSettle();
-    expect(find.text('PRÓXIMA CIFRA ▶'), findsOneWidget);
-    expect(find.text('Ações reconhecidas: 1'), findsOneWidget);
-
-    await tester.tap(find.text('Fechar'));
-    await tester.pumpAndSettle();
-    expect(find.byType(DialogoTestePedal), findsNothing);
+    // 1. Verifica que o ícone de teste do pedal não existe mais
+    expect(find.byTooltip('Testar pedal Bluetooth'), findsNothing);
+    expect(find.byIcon(Icons.keyboard_alt_outlined), findsNothing);
 
     // 2. Verifica navegação contínua (1ª, 2ª e 3ª pisada) sem que o foco caia no campo de busca
     expect(find.text('1/3'), findsOneWidget);

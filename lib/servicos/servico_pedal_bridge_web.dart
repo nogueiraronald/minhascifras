@@ -1,6 +1,9 @@
 // ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
 import 'dart:async';
 import 'dart:html' as html;
+import 'dart:js' as js;
+
+import 'package:flutter/widgets.dart';
 
 typedef PedalActionCallback = void Function(String action);
 typedef PedalDebugCallback = void Function(String info);
@@ -10,8 +13,33 @@ PedalDebugCallback? _debugCallback;
 StreamSubscription<html.Event>? _actionSub;
 StreamSubscription<html.Event>? _debugSub;
 String _ultimoDebug = '';
+bool _focusListenerRegistered = false;
+
+bool _isEditableTextFocused() {
+  final focus = FocusManager.instance.primaryFocus;
+  if (focus == null) return false;
+  final ctx = focus.context;
+  if (ctx == null) return false;
+  if (ctx.widget is EditableText) return true;
+  if (ctx.findAncestorWidgetOfExactType<EditableText>() != null) return true;
+  return false;
+}
+
+void _onFlutterFocusChanged() {
+  final editing = _isEditableTextFocused();
+  try {
+    js.context['__mcEditingText'] = editing;
+  } catch (_) {}
+  if (!editing) {
+    html.window.dispatchEvent(html.CustomEvent('refocuspedal'));
+  }
+}
 
 void _ensureActionSubscription() {
+  if (!_focusListenerRegistered) {
+    _focusListenerRegistered = true;
+    FocusManager.instance.addListener(_onFlutterFocusChanged);
+  }
   if (_actionSub != null) return;
   _actionSub = html.window.on['pedalaction'].listen((event) {
     if (event is html.CustomEvent && event.detail != null) {
@@ -30,6 +58,7 @@ void registrarPedalActionBridge(PedalActionCallback? callback) {
     _actionListeners.remove(callback);
     _actionListeners.add(callback);
   }
+  _onFlutterFocusChanged();
 }
 
 void desregistrarPedalActionBridge(PedalActionCallback? callback) {
@@ -53,5 +82,8 @@ String obterUltimoDebugBridge() {
 }
 
 void reassumirFocoPedalBridge() {
+  try {
+    js.context['__mcEditingText'] = false;
+  } catch (_) {}
   html.window.dispatchEvent(html.CustomEvent('refocuspedal'));
 }

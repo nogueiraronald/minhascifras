@@ -2730,6 +2730,7 @@ class _TelaLeitorComunidadeOnlineState
     super.initState();
     HardwareKeyboard.instance.addHandler(_handleGlobalKeyEvent);
     ServicoPedalBridge.registrar(_handleBridgePedalAction);
+    ServicoPedalBridge.reassumirFoco();
     _songList = List<CommunitySong>.from(widget.songs);
     _currentIndex = _songList.isEmpty
         ? 0
@@ -2739,6 +2740,7 @@ class _TelaLeitorComunidadeOnlineState
   @override
   void dispose() {
     ServicoPedalBridge.desregistrar(_handleBridgePedalAction);
+    ServicoPedalBridge.reassumirFoco();
     _pedalHudController.dispose();
     HardwareKeyboard.instance.removeHandler(_handleGlobalKeyEvent);
     _scrollTimer?.cancel();
@@ -2759,6 +2761,8 @@ class _TelaLeitorComunidadeOnlineState
         _currentIndex = next;
         _transpose = 0;
       });
+      _readerFocusNode.requestFocus();
+      ServicoPedalBridge.reassumirFoco();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_scrollController.hasClients) {
           _scrollController.jumpTo(0);

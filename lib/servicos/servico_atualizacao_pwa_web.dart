@@ -130,6 +130,11 @@ Future<void> verificarAtualizacao(BuildContext context) async {
       ),
       backgroundColor: Colors.green,
       duration: const Duration(seconds: 4),
+      action: const SnackBarAction(
+        label: 'Recarregar',
+        textColor: Colors.white,
+        onPressed: _aplicarAtualizacao,
+      ),
     ),
   );
 }
