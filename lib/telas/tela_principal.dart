@@ -858,7 +858,9 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   void _handleBridgePedalAction(String action) {
-    if (!mounted || _isTextEditingFocused()) return;
+    // O filtro de campos de texto reais já é feito no JavaScript (index.html).
+    // Não consultar o foco do Flutter aqui: um FocusNode "preso" da busca silenciava o pedal.
+    if (!mounted) return;
     switch (action) {
       case 'next':
         _navigateSong(1);

@@ -2935,9 +2935,8 @@ class _TelaLeitorComunidadeOnlineState
   }
 
   void _handleBridgePedalAction(String action) {
+    // O filtro de campos de texto reais já é feito no JavaScript (index.html).
     if (!mounted) return;
-    final focus = FocusManager.instance.primaryFocus;
-    if (focus?.context?.widget is EditableText) return;
 
     switch (action) {
       case 'next':
