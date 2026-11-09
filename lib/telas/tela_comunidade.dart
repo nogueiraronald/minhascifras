@@ -2738,7 +2738,7 @@ class _TelaLeitorComunidadeOnlineState
 
   @override
   void dispose() {
-    ServicoPedalBridge.registrar(null);
+    ServicoPedalBridge.desregistrar(_handleBridgePedalAction);
     _pedalHudController.dispose();
     HardwareKeyboard.instance.removeHandler(_handleGlobalKeyEvent);
     _scrollTimer?.cancel();
@@ -3052,14 +3052,11 @@ class _TelaLeitorComunidadeOnlineState
   void _handlePedalScrollDown(double delta) {
     if (!_scrollController.hasClients ||
         _scrollController.positions.length != 1) {
-      _navigateSong(1);
       return;
     }
 
     final pos = _scrollController.position;
-    if (pos.maxScrollExtent <= 15 || pos.pixels >= pos.maxScrollExtent - 35) {
-      _navigateSong(1);
-    } else {
+    if (pos.pixels < pos.maxScrollExtent) {
       _pedalHudController.mostrar(TipoAcaoPedal.descer);
       _scrollBy(delta);
     }
@@ -3068,14 +3065,11 @@ class _TelaLeitorComunidadeOnlineState
   void _handlePedalScrollUp(double delta) {
     if (!_scrollController.hasClients ||
         _scrollController.positions.length != 1) {
-      _navigateSong(-1);
       return;
     }
 
     final pos = _scrollController.position;
-    if (pos.maxScrollExtent <= 15 || pos.pixels <= 20) {
-      _navigateSong(-1);
-    } else {
+    if (pos.pixels > 0) {
       _pedalHudController.mostrar(TipoAcaoPedal.subir);
       _scrollBy(-delta);
     }

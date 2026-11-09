@@ -5,6 +5,10 @@ void registrarPedalActionBridge(PedalActionCallback? callback) {
   // No-op em plataformas não-web
 }
 
+void desregistrarPedalActionBridge(PedalActionCallback? callback) {
+  // No-op em plataformas não-web
+}
+
 void registrarPedalDebugBridge(PedalDebugCallback? callback) {
   // No-op em plataformas não-web
 }

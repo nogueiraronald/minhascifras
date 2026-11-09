@@ -144,12 +144,18 @@ class SyncService extends ChangeNotifier {
     var themePush = false;
     if (_musicThemes != null) {
       if (_musicThemes.hasPendingChanges) {
-        // Alteração intencional do usuário (exclusão, adição, renomeação).
+        // Alteração intencional do usuário (exclusão, adição, renomeação, limpar tudo).
         // A lista local é a fonte da verdade definitiva e deve persistir no banco.
         themePush = true;
         _musicThemes.markSynced();
+      } else if (_musicThemes.isExplicitlyCleared) {
+        // O usuário limpou todos os temas intencionalmente.
+        // Se a nuvem ainda tiver temas, força a sincronização enviando a lista vazia para limpar a nuvem.
+        if (remote.themes.isNotEmpty) {
+          themePush = true;
+        }
       } else if (_musicThemes.themes.isEmpty && remote.themes.isNotEmpty) {
-        // Dispositivo novo ou primeiro login: importa os temas salvos na conta do usuário
+        // Dispositivo novo ou primeiro login (sem exclusão explícita): importa os temas salvos na conta do usuário
         await _musicThemes.setThemes(remote.themes, fromSync: true);
       } else {
         // Verifica se a lista de temas locais difere da nuvem

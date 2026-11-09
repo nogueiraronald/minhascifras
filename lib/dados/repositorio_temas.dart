@@ -8,11 +8,21 @@ import 'repositorio_musicas.dart';
 
 /// Gerenciador de Temas / Estilos musicais (Adoração, Comunhão, Baião, Casamento, etc.)
 class ThemeRepository extends ChangeNotifier {
-  ThemeRepository._(this._prefs, List<String> themes) : _themes = themes;
+  ThemeRepository._(
+    this._prefs,
+    List<String> themes, {
+    required bool isExplicitlyCleared,
+  })  : _themes = themes,
+        _isExplicitlyCleared = isExplicitlyCleared;
 
   static const _key = 'music_themes_v1';
+  static const _clearedKey = 'music_themes_explicitly_cleared_v1';
   final SharedPreferences _prefs;
   final List<String> _themes;
+  bool _isExplicitlyCleared;
+
+  /// Retorna se o usuário limpou intencionalmente todos os temas.
+  bool get isExplicitlyCleared => _isExplicitlyCleared;
 
   /// Chamado após alterações do usuário (não pela sincronização).
   VoidCallback? onLocalChange;
@@ -64,6 +74,7 @@ class ThemeRepository extends ChangeNotifier {
     // Remove chave legada de temas deletados para liberar espaço
     await prefs.remove('music_deleted_themes_v1');
     final raw = prefs.getString(_key);
+    final isExplicitlyCleared = prefs.getBool(_clearedKey) ?? false;
 
     List<String> list;
     if (raw == null) {
@@ -77,7 +88,11 @@ class ThemeRepository extends ChangeNotifier {
     }
 
     list.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-    return ThemeRepository._(prefs, list);
+    return ThemeRepository._(
+      prefs,
+      list,
+      isExplicitlyCleared: isExplicitlyCleared,
+    );
   }
 
   List<String> get themes {
@@ -107,6 +122,8 @@ class ThemeRepository extends ChangeNotifier {
     if (!_themes.any((t) => t.toLowerCase() == tLower)) {
       _themes.add(trimmed);
       _themes.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+      _isExplicitlyCleared = false;
+      await _prefs.setBool(_clearedKey, false);
       await _persist();
     }
   }
@@ -152,6 +169,10 @@ class ThemeRepository extends ChangeNotifier {
     final initialCount = _themes.length;
     _themes.removeWhere((t) => t.toLowerCase() == tLower);
     if (_themes.length != initialCount) {
+      if (_themes.isEmpty) {
+        _isExplicitlyCleared = true;
+        await _prefs.setBool(_clearedKey, true);
+      }
       await _persist();
       await songRepo.removeTagFromAll(trimmed);
     }
@@ -179,12 +200,23 @@ class ThemeRepository extends ChangeNotifier {
       ..clear()
       ..addAll(set)
       ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    if (newThemes.isNotEmpty) {
+      _isExplicitlyCleared = false;
+      await _prefs.setBool(_clearedKey, false);
+    }
     await _persist(fromSync: fromSync);
   }
 
-  Future<void> clearAll() async {
+  /// Exclui todos os temas locais e desvincula as músicas associadas,
+  /// marcando explicitamente para sincronizar a lista vazia no banco em nuvem.
+  Future<void> clearAll([SongRepository? songRepo]) async {
     _themes.clear();
-    await _persist(fromSync: true);
+    _isExplicitlyCleared = true;
+    await _prefs.setBool(_clearedKey, true);
+    if (songRepo != null) {
+      await songRepo.removeAllTags();
+    }
+    await _persist(fromSync: false);
   }
 
   Future<void> _persist({bool fromSync = false}) async {

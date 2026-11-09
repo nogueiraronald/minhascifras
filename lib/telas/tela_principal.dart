@@ -226,7 +226,7 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   void dispose() {
-    ServicoPedalBridge.registrar(null);
+    ServicoPedalBridge.desregistrar(_handleBridgePedalAction);
     _pedalHudController.dispose();
     HardwareKeyboard.instance.removeHandler(_handleGlobalKeyEvent);
     ServicoWakeLock.manterTelaAtiva(false);
@@ -355,9 +355,6 @@ class _MainScreenState extends State<MainScreen> {
 
     ServicoWakeLock.manterTelaAtiva(true);
     _initKaraokeController(song);
-
-    // Mantém o canal de entrada do pedal Bluetooth ativo no Web/Safari sem destruir foco do DOM
-    _mainFocusNode.requestFocus();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients &&
@@ -1434,6 +1431,7 @@ class _MainScreenState extends State<MainScreen> {
       ),
     );
     if (mounted) {
+      ServicoPedalBridge.registrar(_handleBridgePedalAction);
       if (importedSongId != null && importedSongId.isNotEmpty) {
         final importedSong = widget.repository.songs
             .where((s) => s.id == importedSongId)
@@ -2146,6 +2144,32 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
+  Future<void> _deleteAllThemesDialog() async {
+    final confirm = await _confirmDeletion(
+      title: 'Excluir Todos os Temas',
+      message:
+          'Tem certeza que deseja excluir permanentemente todos os temas cadastrados?\n'
+          'As músicas associadas não serão apagadas, apenas desvinculadas dos temas.\n'
+          'Esta alteração será salva localmente e sincronizada em definitivo na nuvem.',
+      confirmText: 'Excluir Todos',
+    );
+    if (confirm == true) {
+      await widget.musicThemes.clearAll(widget.repository);
+      if (_selectedTheme != null) {
+        setState(() => _selectedTheme = null);
+        _ensureFirstSongSelected();
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Todos os temas foram excluídos com sucesso.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _exportTheme(String themeName) async {
     final songs =
         widget.musicThemes.songsFor(themeName, widget.repository.songs);
@@ -2390,17 +2414,6 @@ class _MainScreenState extends State<MainScreen> {
                     tooltip: 'Temas / Estilos da música',
                     icon: const Icon(Icons.folder_outlined, size: 20),
                     onPressed: () => _showSongThemesDialog(_currentSong!),
-                  ),
-                  IconButton(
-                    tooltip: 'Verificar Atualizações do App',
-                    icon: const Icon(
-                      Icons.system_update_rounded,
-                      size: 20,
-                      color: Colors.purpleAccent,
-                    ),
-                    onPressed: () async {
-                      await ServicoAtualizacaoPwa.verificarAtualizacao(context);
-                    },
                   ),
                   if (widget.theme != null && !_showSidebar)
                     IconButton(
@@ -3633,6 +3646,13 @@ class _MainScreenState extends State<MainScreen> {
                 style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
               ),
               const Spacer(),
+              if (widget.musicThemes.themes.isNotEmpty)
+                IconButton(
+                  tooltip: 'Excluir Todos os Temas',
+                  icon: const Icon(Icons.delete_sweep_outlined,
+                      color: Colors.redAccent, size: 22),
+                  onPressed: _deleteAllThemesDialog,
+                ),
               IconButton(
                 tooltip: 'Novo Tema',
                 icon: const Icon(Icons.create_new_folder_outlined,
@@ -3922,11 +3942,26 @@ class _MainScreenState extends State<MainScreen> {
           ),
           child: Row(
             children: [
-              Text(
-                '${filteredThemes.length} tema(s) cadastrado(s)',
-                style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+              Expanded(
+                child: Text(
+                  '${filteredThemes.length} tema(s) cadastrado(s)',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              const Spacer(),
+              if (widget.musicThemes.themes.isNotEmpty) ...[
+                IconButton(
+                  tooltip: 'Excluir Todos os Temas',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 32, minHeight: 32),
+                  icon: const Icon(Icons.delete_sweep_outlined,
+                      color: Colors.redAccent, size: 18),
+                  onPressed: _deleteAllThemesDialog,
+                ),
+                const SizedBox(width: 4),
+              ],
               TextButton(
                 style: TextButton.styleFrom(
                   padding:

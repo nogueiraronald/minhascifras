@@ -197,6 +197,21 @@ class SongRepository extends ChangeNotifier {
     }
   }
 
+  Future<void> removeAllTags() async {
+    bool changed = false;
+    final now = DateTime.now();
+    for (int i = 0; i < _songs.length; i++) {
+      if (_songs[i].tags.isNotEmpty) {
+        _songs[i] = _songs[i].copyWith(tags: const [], updatedAt: now);
+        changed = true;
+      }
+    }
+    if (changed) {
+      await _persist();
+      onLocalChange?.call();
+    }
+  }
+
   Future<void> renameTagInAll(String oldTag, String newTag) async {
     final oldTrimmed = oldTag.toLowerCase().trim();
     final newTrimmed = newTag.trim();
