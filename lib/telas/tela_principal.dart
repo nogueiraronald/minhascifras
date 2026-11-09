@@ -4034,20 +4034,24 @@ class _MainScreenState extends State<MainScreen> {
     return Column(
       children: [
         // Cabeçalho da Barra Lateral
-        Container(
-          padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
-          decoration: BoxDecoration(
-            color: Theme.of(context)
-                .colorScheme
-                .surfaceContainerHighest
-                .withValues(alpha: 0.25),
-            border: Border(
-                bottom: BorderSide(color: Colors.grey.withValues(alpha: 0.2))),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
+        Focus(
+          canRequestFocus: false,
+          descendantsAreFocusable: false,
+          skipTraversal: true,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
+            decoration: BoxDecoration(
+              color: Theme.of(context)
+                  .colorScheme
+                  .surfaceContainerHighest
+                  .withValues(alpha: 0.25),
+              border: Border(
+                  bottom: BorderSide(color: Colors.grey.withValues(alpha: 0.2))),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
                 children: [
                   if (Navigator.canPop(context)) ...[
                     BotaoVoltarInicio(
@@ -4162,6 +4166,7 @@ class _MainScreenState extends State<MainScreen> {
               ),
             ],
           ),
+        ),
         ),
 
         // Abas: "Todas", "Favoritas", "Listas" e "Temas"
