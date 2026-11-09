@@ -341,6 +341,17 @@ class _TelaInicialState extends State<TelaInicial> {
               ),
               onPressed: () => widget.theme!.toggle(context),
             ),
+          IconButton(
+            tooltip: 'Verificar Atualizações do App',
+            icon: const Icon(
+              Icons.system_update_rounded,
+              size: 20,
+              color: Colors.purpleAccent,
+            ),
+            onPressed: () async {
+              await ServicoAtualizacaoPwa.verificarAtualizacao(context);
+            },
+          ),
           AccountButton(
             account: widget.account,
             songs: widget.repository,

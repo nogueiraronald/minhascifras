@@ -356,7 +356,7 @@ class _MainScreenState extends State<MainScreen> {
     ServicoWakeLock.manterTelaAtiva(true);
     _initKaraokeController(song);
 
-    FocusManager.instance.primaryFocus?.unfocus();
+    // Mantém o canal de entrada do pedal Bluetooth ativo no Web/Safari sem destruir foco do DOM
     _mainFocusNode.requestFocus();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -3988,6 +3988,21 @@ class _MainScreenState extends State<MainScreen> {
                       ),
                       onPressed: () => widget.theme!.toggle(context),
                     ),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints:
+                        const BoxConstraints(minWidth: 32, minHeight: 32),
+                    tooltip: 'Verificar Atualizações do App',
+                    icon: const Icon(
+                      Icons.system_update_rounded,
+                      size: 20,
+                      color: Colors.purpleAccent,
+                    ),
+                    onPressed: () async {
+                      await ServicoAtualizacaoPwa.verificarAtualizacao(context);
+                    },
+                  ),
                   AccountButton(
                     account: widget.account,
                     songs: widget.repository,
