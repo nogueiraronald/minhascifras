@@ -25,6 +25,7 @@ import '../servicos/servico_sincronizacao.dart';
 import '../servicos/transpositor_acordes.dart';
 import '../componentes/indicador_pedal.dart';
 import '../servicos/servico_pedal_bridge.dart';
+import '../servicos/servico_atualizacao_pwa.dart';
 import 'package:uuid/uuid.dart';
 
 /// Tela da Comunidade:
@@ -2041,6 +2042,17 @@ class _TelaComunidadeState extends State<TelaComunidade> {
                 tooltip: 'Atualizar cifras da comunidade',
                 icon: const Icon(Icons.refresh_rounded, size: 20),
                 onPressed: _loading ? null : _loadOnlineCommunitySongs,
+              ),
+              IconButton(
+                tooltip: 'Verificar Atualizações do App',
+                icon: const Icon(
+                  Icons.system_update_rounded,
+                  size: 20,
+                  color: Colors.purpleAccent,
+                ),
+                onPressed: () async {
+                  await ServicoAtualizacaoPwa.verificarAtualizacao(context);
+                },
               ),
               if (widget.theme != null)
                 IconButton(

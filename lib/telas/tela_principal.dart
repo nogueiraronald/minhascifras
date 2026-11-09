@@ -2391,6 +2391,17 @@ class _MainScreenState extends State<MainScreen> {
                     icon: const Icon(Icons.folder_outlined, size: 20),
                     onPressed: () => _showSongThemesDialog(_currentSong!),
                   ),
+                  IconButton(
+                    tooltip: 'Verificar Atualizações do App',
+                    icon: const Icon(
+                      Icons.system_update_rounded,
+                      size: 20,
+                      color: Colors.purpleAccent,
+                    ),
+                    onPressed: () async {
+                      await ServicoAtualizacaoPwa.verificarAtualizacao(context);
+                    },
+                  ),
                   if (widget.theme != null && !_showSidebar)
                     IconButton(
                       tooltip: widget.theme!.isDark(context)
@@ -5415,6 +5426,18 @@ class _MainScreenState extends State<MainScreen> {
                               onPressed: _editCurrentSong,
                             ),
                           ],
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                                minWidth: 36, minHeight: 36),
+                            tooltip: 'Verificar Atualizações do App',
+                            icon: const Icon(Icons.system_update_rounded,
+                                size: 20, color: Colors.purpleAccent),
+                            onPressed: () async {
+                              await ServicoAtualizacaoPwa.verificarAtualizacao(context);
+                            },
+                          ),
                           PopupMenuButton<String>(
                             icon: const Icon(Icons.more_vert),
                             padding: EdgeInsets.zero,

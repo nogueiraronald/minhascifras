@@ -145,9 +145,7 @@ Future<void> verificarEForcarAtualizacaoAoIniciar() async {
       final pendingUpdate =
           html.window.localStorage['mc_pending_update'] == 'true';
 
-      if ((serverBuild.isNotEmpty &&
-              localBuild.isNotEmpty &&
-              serverBuild != localBuild) ||
+      if ((serverBuild.isNotEmpty && serverBuild != localBuild) ||
           pendingUpdate) {
         // Nova versão detectada! Força atualização imediatamente sem esperar o usuário.
         html.window.localStorage['minhas_cifras_active_version'] = serverBuild;
