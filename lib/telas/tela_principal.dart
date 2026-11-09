@@ -39,6 +39,8 @@ import '../componentes/player_youtube_embutido.dart';
 import '../servicos/servico_atualizacao_pwa.dart';
 import '../servicos/servico_comunidade.dart';
 import '../servicos/servico_wakelock.dart';
+import '../componentes/indicador_pedal.dart';
+import '../servicos/servico_pedal_bridge.dart';
 import 'tela_comunidade.dart';
 
 /// Modos de exibição da música: Cifra completa, Letra pura ou Partitura musical.
@@ -128,6 +130,8 @@ class _MainScreenState extends State<MainScreen> {
   final List<Timer> _retireTimers = [];
   final FocusNode _sliderFocusNode =
       FocusNode(canRequestFocus: false, skipTraversal: true);
+  final ControladorIndicadorPedal _pedalHudController =
+      ControladorIndicadorPedal();
   Timer? _scrollTimer;
   double _fontSize = 17;
   double _speed = 20; // pixels por segundo
@@ -182,6 +186,7 @@ class _MainScreenState extends State<MainScreen> {
   void initState() {
     super.initState();
     HardwareKeyboard.instance.addHandler(_handleGlobalKeyEvent);
+    ServicoPedalBridge.registrar(_handleBridgePedalAction);
     ServicoWakeLock.manterTelaAtiva(true);
     _loadUserPreferences();
     widget.account.addListener(_checkAccountLock);
@@ -215,6 +220,8 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   void dispose() {
+    ServicoPedalBridge.registrar(null);
+    _pedalHudController.dispose();
     HardwareKeyboard.instance.removeHandler(_handleGlobalKeyEvent);
     ServicoWakeLock.manterTelaAtiva(false);
     widget.account.removeListener(_checkAccountLock);
@@ -828,6 +835,38 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+  void _handleBridgePedalAction(String action) {
+    if (!mounted || _isTextEditingFocused()) return;
+    switch (action) {
+      case 'next':
+        _navigateSong(1);
+        break;
+      case 'prev':
+        _navigateSong(-1);
+        break;
+      case 'down':
+        _handlePedalScrollDown(280);
+        break;
+      case 'up':
+        _handlePedalScrollUp(280);
+        break;
+      case 'space':
+        if (_isPlaying) {
+          _stopScroll();
+        } else {
+          _handlePedalScrollDown(280);
+        }
+        break;
+      case 'enter':
+        if (_isPlaying) {
+          _stopScroll();
+        } else {
+          _handlePedalScrollUp(280);
+        }
+        break;
+    }
+  }
+
   bool _handleGlobalKeyEvent(KeyEvent event) {
     if (!mounted) return false;
 
@@ -932,6 +971,7 @@ class _MainScreenState extends State<MainScreen> {
     if (pos.maxScrollExtent <= 15 || pos.pixels >= pos.maxScrollExtent - 35) {
       _navigateSong(1);
     } else {
+      _pedalHudController.mostrar(TipoAcaoPedal.descer);
       _scrollBy(delta);
     }
   }
@@ -950,6 +990,7 @@ class _MainScreenState extends State<MainScreen> {
     if (pos.maxScrollExtent <= 15 || pos.pixels <= 20) {
       _navigateSong(-1);
     } else {
+      _pedalHudController.mostrar(TipoAcaoPedal.subir);
       _scrollBy(-delta);
     }
   }
@@ -966,6 +1007,8 @@ class _MainScreenState extends State<MainScreen> {
     if (currentIndex < 0) return;
     final nextIndex = currentIndex + delta;
     if (nextIndex >= 0 && nextIndex < songs.length) {
+      _pedalHudController.mostrar(
+          delta > 0 ? TipoAcaoPedal.proxima : TipoAcaoPedal.anterior);
       _navDirection = delta;
       _selectSong(songs[nextIndex]);
     }
@@ -2438,6 +2481,9 @@ class _MainScreenState extends State<MainScreen> {
                   initialBottom: 8,
                   onClose: () => setState(() => _showYoutubeVideo = false),
                 ),
+
+              // Indicador Visual Flutuante do Pedal (Cursor HUD de Próxima/Anterior/Rolagem)
+              IndicadorPedalOverlay(controller: _pedalHudController),
             ],
           ),
         ),
@@ -2458,6 +2504,7 @@ class _MainScreenState extends State<MainScreen> {
         Focus(
           canRequestFocus: false,
           descendantsAreFocusable: false,
+          skipTraversal: true,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
@@ -2782,12 +2829,17 @@ class _MainScreenState extends State<MainScreen> {
                           const SizedBox(width: 8),
                           SizedBox(
                             width: 90,
-                            child: Slider(
-                              focusNode: _sliderFocusNode,
-                              value: _speed,
-                              min: 5,
-                              max: 120,
-                              onChanged: (v) => _updateSpeed(v),
+                            child: Focus(
+                              canRequestFocus: false,
+                              descendantsAreFocusable: false,
+                              skipTraversal: true,
+                              child: Slider(
+                                focusNode: _sliderFocusNode,
+                                value: _speed,
+                                min: 5,
+                                max: 120,
+                                onChanged: (v) => _updateSpeed(v),
+                              ),
                             ),
                           ),
                         ],

@@ -1,3 +1,4 @@
+import 'package:cifras_app/componentes/indicador_pedal.dart';
 import 'package:cifras_app/dados/biblioteca_acordes.dart';
 import 'package:cifras_app/dados/controlador_conta.dart';
 import 'package:cifras_app/dados/repositorio_listas.dart';
@@ -192,4 +193,36 @@ void main() {
     // Não deve mudar de música pois o usuário está editando texto
     expect(find.text('Música 1 Alpha'), findsWidgets);
   });
+
+  testWidgets('Pedal exibe feedback visual na tela (indicador com seta de direção grande)',
+      (tester) async {
+    tester.view.physicalSize = const Size(1920, 1080);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+
+    expect(find.byType(IndicadorPedalOverlay), findsOneWidget);
+
+    // Envia comando de avançar
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    // Dá um pump curto (sem settle para não esperar o timer de 650ms sumir)
+    await tester.pump(const Duration(milliseconds: 50));
+
+    // O ícone de seta para a direita deve estar presente no HUD
+    expect(find.byIcon(Icons.arrow_forward_rounded), findsOneWidget);
+
+    // Espera o HUD desaparecer após 650ms
+    await tester.pumpAndSettle();
+
+    // Envia comando de retroceder
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump(const Duration(milliseconds: 50));
+
+    // O ícone de seta para a esquerda deve estar presente no HUD
+    expect(find.byIcon(Icons.arrow_back_rounded), findsOneWidget);
+    await tester.pumpAndSettle();
+  });
 }
+

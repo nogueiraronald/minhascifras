@@ -23,6 +23,8 @@ import '../modelos/musica_comunidade.dart';
 import '../servicos/servico_comunidade.dart';
 import '../servicos/servico_sincronizacao.dart';
 import '../servicos/transpositor_acordes.dart';
+import '../componentes/indicador_pedal.dart';
+import '../servicos/servico_pedal_bridge.dart';
 import 'package:uuid/uuid.dart';
 
 /// Tela da Comunidade:
@@ -2696,6 +2698,8 @@ class _TelaLeitorComunidadeOnlineState
   final FocusNode _readerFocusNode =
       FocusNode(debugLabel: "CommunityReaderFocus");
   final ScrollController _scrollController = ScrollController();
+  final ControladorIndicadorPedal _pedalHudController =
+      ControladorIndicadorPedal();
   int _transpose = 0;
   double _fontSize = 17;
   double _speed = 20;
@@ -2713,6 +2717,7 @@ class _TelaLeitorComunidadeOnlineState
   void initState() {
     super.initState();
     HardwareKeyboard.instance.addHandler(_handleGlobalKeyEvent);
+    ServicoPedalBridge.registrar(_handleBridgePedalAction);
     _songList = List<CommunitySong>.from(widget.songs);
     _currentIndex = _songList.isEmpty
         ? 0
@@ -2721,6 +2726,8 @@ class _TelaLeitorComunidadeOnlineState
 
   @override
   void dispose() {
+    ServicoPedalBridge.registrar(null);
+    _pedalHudController.dispose();
     HardwareKeyboard.instance.removeHandler(_handleGlobalKeyEvent);
     _scrollTimer?.cancel();
     _scrollController.dispose();
@@ -2732,6 +2739,8 @@ class _TelaLeitorComunidadeOnlineState
     if (_songList.isEmpty) return;
     final next = _currentIndex + delta;
     if (next >= 0 && next < _songList.length) {
+      _pedalHudController.mostrar(
+          delta > 0 ? TipoAcaoPedal.proxima : TipoAcaoPedal.anterior);
       _stopScroll();
       setState(() {
         _navDirection = delta;
@@ -2913,6 +2922,41 @@ class _TelaLeitorComunidadeOnlineState
     );
   }
 
+  void _handleBridgePedalAction(String action) {
+    if (!mounted) return;
+    final focus = FocusManager.instance.primaryFocus;
+    if (focus?.context?.widget is EditableText) return;
+
+    switch (action) {
+      case 'next':
+        _navigateSong(1);
+        break;
+      case 'prev':
+        _navigateSong(-1);
+        break;
+      case 'down':
+        _handlePedalScrollDown(280);
+        break;
+      case 'up':
+        _handlePedalScrollUp(280);
+        break;
+      case 'space':
+        if (_isPlaying) {
+          _stopScroll();
+        } else {
+          _handlePedalScrollDown(280);
+        }
+        break;
+      case 'enter':
+        if (_isPlaying) {
+          _stopScroll();
+        } else {
+          _handlePedalScrollUp(280);
+        }
+        break;
+    }
+  }
+
   bool _handleGlobalKeyEvent(KeyEvent event) {
     if (!mounted) return false;
 
@@ -3004,6 +3048,7 @@ class _TelaLeitorComunidadeOnlineState
     if (pos.maxScrollExtent <= 15 || pos.pixels >= pos.maxScrollExtent - 35) {
       _navigateSong(1);
     } else {
+      _pedalHudController.mostrar(TipoAcaoPedal.descer);
       _scrollBy(delta);
     }
   }
@@ -3019,6 +3064,7 @@ class _TelaLeitorComunidadeOnlineState
     if (pos.maxScrollExtent <= 15 || pos.pixels <= 20) {
       _navigateSong(-1);
     } else {
+      _pedalHudController.mostrar(TipoAcaoPedal.subir);
       _scrollBy(-delta);
     }
   }
@@ -3139,65 +3185,72 @@ class _TelaLeitorComunidadeOnlineState
 
             // Área de Leitura Central com gesto de arrastar para os lados
             Expanded(
-              child: GestureDetector(
-                behavior: HitTestBehavior.translucent,
-                onHorizontalDragStart: (_) {
-                  _horizontalDragDistance = 0;
-                },
-                onHorizontalDragUpdate: (details) {
-                  _horizontalDragDistance += details.primaryDelta ?? 0;
-                },
-                onHorizontalDragEnd: (details) {
-                  final velocity = details.primaryVelocity ?? 0;
-                  if (_horizontalDragDistance < -50 || velocity < -250) {
-                    _navigateSong(1);
-                  } else if (_horizontalDragDistance > 50 || velocity > 250) {
-                    _navigateSong(-1);
-                  }
-                  _horizontalDragDistance = 0;
-                },
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 250),
-                  transitionBuilder: (child, animation) {
-                    final offset = Tween<Offset>(
-                      begin: Offset(_navDirection >= 0 ? 0.08 : -0.08, 0),
-                      end: Offset.zero,
-                    ).animate(CurvedAnimation(
-                      parent: animation,
-                      curve: Curves.easeOutCubic,
-                    ));
-                    return FadeTransition(
-                      opacity: animation,
-                      child: SlideTransition(position: offset, child: child),
-                    );
-                  },
-                  child: KeyedSubtree(
-                    key: ValueKey('${currentItem.id}_$_modeIndex'),
-                    child: _modeIndex == 0
-                        ? ChordSheetView(
-                            content: song.content,
-                            transpose: _transpose,
-                            fontSize: _fontSize,
-                            controller: _scrollController,
-                            onChordTap: (chord) =>
-                                showChordDialog(context, widget.chords, chord),
-                          )
-                        : _modeIndex == 1
-                            ? LyricsView(
-                                content: song.content,
-                                fontSize: _fontSize,
-                                controller: _scrollController,
-                              )
-                            : ScoreSheetView(
-                                content: song.content,
-                                transpose: _transpose,
-                                fontSize: _fontSize,
-                                controller: _scrollController,
-                                onChordTap: (chord) =>
-                                    showChordDialog(context, widget.chords, chord),
-                              ),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onHorizontalDragStart: (_) {
+                        _horizontalDragDistance = 0;
+                      },
+                      onHorizontalDragUpdate: (details) {
+                        _horizontalDragDistance += details.primaryDelta ?? 0;
+                      },
+                      onHorizontalDragEnd: (details) {
+                        final velocity = details.primaryVelocity ?? 0;
+                        if (_horizontalDragDistance < -50 || velocity < -250) {
+                          _navigateSong(1);
+                        } else if (_horizontalDragDistance > 50 || velocity > 250) {
+                          _navigateSong(-1);
+                        }
+                        _horizontalDragDistance = 0;
+                      },
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 250),
+                        transitionBuilder: (child, animation) {
+                          final offset = Tween<Offset>(
+                            begin: Offset(_navDirection >= 0 ? 0.08 : -0.08, 0),
+                            end: Offset.zero,
+                          ).animate(CurvedAnimation(
+                            parent: animation,
+                            curve: Curves.easeOutCubic,
+                          ));
+                          return FadeTransition(
+                            opacity: animation,
+                            child: SlideTransition(position: offset, child: child),
+                          );
+                        },
+                        child: KeyedSubtree(
+                          key: ValueKey('${currentItem.id}_$_modeIndex'),
+                          child: _modeIndex == 0
+                              ? ChordSheetView(
+                                  content: song.content,
+                                  transpose: _transpose,
+                                  fontSize: _fontSize,
+                                  controller: _scrollController,
+                                  onChordTap: (chord) =>
+                                      showChordDialog(context, widget.chords, chord),
+                                )
+                              : _modeIndex == 1
+                                  ? LyricsView(
+                                      content: song.content,
+                                      fontSize: _fontSize,
+                                      controller: _scrollController,
+                                    )
+                                  : ScoreSheetView(
+                                      content: song.content,
+                                      transpose: _transpose,
+                                      fontSize: _fontSize,
+                                      controller: _scrollController,
+                                      onChordTap: (chord) =>
+                                          showChordDialog(context, widget.chords, chord),
+                                    ),
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                  IndicadorPedalOverlay(controller: _pedalHudController),
+                ],
               ),
             ),
 
