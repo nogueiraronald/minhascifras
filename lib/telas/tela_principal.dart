@@ -172,6 +172,7 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   // Barra Lateral: Scroll da lista e índice alfabético
+  static const double _sidebarSongItemExtent = 54.0;
   final ScrollController _sidebarSongListController = ScrollController();
   String? _activeInitialBubble;
   Timer? _bubbleTimer;
@@ -325,7 +326,7 @@ class _MainScreenState extends State<MainScreen> {
     }).toList();
   }
 
-  void _selectSong(Song song) {
+  void _selectSong(Song song, {bool scrollSidebar = true}) {
     _stopScroll();
 
     SetlistItem? item;
@@ -375,7 +376,9 @@ class _MainScreenState extends State<MainScreen> {
           _scrollController.positions.length == 1) {
         _scrollController.jumpTo(0);
       }
-      _scrollToSelectedSongInSidebar(song.id);
+      if (scrollSidebar) {
+        _scrollToSelectedSongInSidebar(song.id);
+      }
     });
   }
 
@@ -384,15 +387,45 @@ class _MainScreenState extends State<MainScreen> {
     final visible = _getVisibleSongs();
     final idx = visible.indexWhere((s) => s.id == songId);
     if (idx < 0) return;
-    final targetOffset = (idx * 48.0).clamp(
+    final targetOffset = (idx * _sidebarSongItemExtent).clamp(
       0.0,
       _sidebarSongListController.position.maxScrollExtent,
     );
     _sidebarSongListController.animateTo(
       targetOffset,
-      duration: const Duration(milliseconds: 200),
+      duration: const Duration(milliseconds: 220),
       curve: Curves.easeOutCubic,
     );
+  }
+
+  /// Seleciona a música vizinha na lista (sem voltar para a letra A e sem mover o scroll da barra lateral)
+  /// quando a música atual é excluída ou removida de uma lista/tema.
+  void _selectNeighborSongAfterRemoval({
+    required String removedSongId,
+    required int removedIndex,
+  }) {
+    final songs = _getVisibleSongs();
+    if (songs.isEmpty) {
+      setState(() {
+        _currentSong = null;
+        _currentSetlistItem = null;
+        _transpose = 0;
+      });
+      _initKaraokeController(null);
+      ServicoWakeLock.manterTelaAtiva(false);
+      return;
+    }
+
+    // Se a música aberta no leitor não era a que foi excluída e ainda está na lista, mantém tudo intacto
+    if (_currentSong != null &&
+        _currentSong!.id != removedSongId &&
+        songs.any((s) => s.id == _currentSong!.id)) {
+      setState(() {});
+      return;
+    }
+
+    final fallbackIndex = removedIndex.clamp(0, songs.length - 1);
+    _selectSong(songs[fallbackIndex], scrollSidebar: false);
   }
 
   Future<void> _editCurrentSong() async {
@@ -4886,7 +4919,10 @@ class _MainScreenState extends State<MainScreen> {
                                           if (confirm == true) {
                                             await widget.setlists
                                                 .removeItem(item.id);
-                                            _ensureFirstSongSelected();
+                                            _selectNeighborSongAfterRemoval(
+                                              removedSongId: song.id,
+                                              removedIndex: index,
+                                            );
                                           }
                                         }
                                       },
@@ -4972,18 +5008,9 @@ class _MainScreenState extends State<MainScreen> {
         songs.indexWhere((s) => _normalizeInitial(s.title) == letter);
     if (targetIndex < 0) return;
 
-    if (_sidebarSongListController.hasClients) {
-      final max = _sidebarSongListController.position.maxScrollExtent;
-      final targetOffset = (targetIndex * 56.0).clamp(0.0, max);
-      _sidebarSongListController.animateTo(
-        targetOffset,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOutCubic,
-      );
-    }
-
-    // Abre e seleciona imediatamente a primeira música iniciada com a letra clicada
-    _selectSong(songs[targetIndex]);
+    // Abre e seleciona imediatamente a primeira música iniciada com a letra clicada,
+    // rolando a lista lateral com itemExtent fixo para exibi-la exatamente no topo em destaque
+    _selectSong(songs[targetIndex], scrollSidebar: true);
 
     _bubbleTimer?.cancel();
     setState(() => _activeInitialBubble = letter);
@@ -5082,12 +5109,14 @@ class _MainScreenState extends State<MainScreen> {
                 descendantsAreFocusable: false,
                 child: ListView.builder(
                   controller: _sidebarSongListController,
+                  itemExtent: _sidebarSongItemExtent,
                   itemCount: songs.length,
                   itemBuilder: (context, index) {
                     final song = songs[index];
                     final isSelected = _currentSong?.id == song.id;
 
                     return Container(
+                      key: ValueKey('sidebar_song_${song.id}'),
                       margin: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
@@ -5101,10 +5130,10 @@ class _MainScreenState extends State<MainScreen> {
                       ),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(8),
-                        onTap: () => _selectSong(song),
+                        onTap: () => _selectSong(song, scrollSidebar: false),
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 7),
+                              horizontal: 8, vertical: 4),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
@@ -5147,13 +5176,13 @@ class _MainScreenState extends State<MainScreen> {
                                                 .colorScheme
                                                 .primary
                                             : null,
-                                        height: 1.25,
+                                        height: 1.2,
                                       ),
-                                      maxLines: 2,
+                                      maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                     if (song.artist.isNotEmpty) ...[
-                                      const SizedBox(height: 3),
+                                      const SizedBox(height: 2),
                                       Text(
                                         song.artist,
                                         style: TextStyle(
@@ -5209,7 +5238,10 @@ class _MainScreenState extends State<MainScreen> {
                                           await widget.repository
                                               .removeTagFromSong(
                                                   song.id, _selectedTheme!);
-                                          _ensureFirstSongSelected();
+                                          _selectNeighborSongAfterRemoval(
+                                            removedSongId: song.id,
+                                            removedIndex: index,
+                                          );
                                         }
                                       } else if (val == 'add_to_list') {
                                         _showAddToSetlistDialog(song);
@@ -5248,7 +5280,10 @@ class _MainScreenState extends State<MainScreen> {
                                               .remove(song.id);
                                           await widget.setlists
                                               .removeItemsForSong(song.id);
-                                          _ensureFirstSongSelected();
+                                          _selectNeighborSongAfterRemoval(
+                                            removedSongId: song.id,
+                                            removedIndex: index,
+                                          );
                                           try {
                                             await widget.sync.sync();
                                           } catch (_) {}
